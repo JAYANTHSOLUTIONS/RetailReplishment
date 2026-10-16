@@ -141,6 +141,13 @@ button, input, select, textarea {
 }
 
 /* Search Input */
+.topbar-search,
+.search-box {
+  display: flex;
+  align-items: center;
+}
+
+.search-wrap,
 .search-box {
   display: flex;
   align-items: center;
@@ -150,19 +157,23 @@ button, input, select, textarea {
   border-radius: 8px;
   padding: 0 10px;
   height: 34px;
-  width: 320px;
+  width: 330px;
   transition: all 0.15s;
 }
+.search-wrap:focus-within,
 .search-box:focus-within {
   border-color: var(--brand);
   background: var(--surface);
   box-shadow: 0 0 0 2px var(--brand-bg);
 }
+.search-wrap svg,
 .search-icon {
   color: var(--text3);
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
+.search-input,
 .search-inp {
   border: none;
   background: transparent;
@@ -171,17 +182,20 @@ button, input, select, textarea {
   outline: none;
   width: 100%;
 }
+.search-input::placeholder,
 .search-inp::placeholder {
   color: var(--text3);
 }
+.search-kbd,
 .search-badge {
+  font-family: inherit;
   font-size: 10px;
   font-weight: 600;
   color: var(--text3);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 1px 5px;
+  padding: 2px 6px;
   white-space: nowrap;
 }
 
@@ -192,7 +206,8 @@ button, input, select, textarea {
   margin-left: auto;
 }
 
-/* Theme pill toggle */
+/* Theme toggle */
+.theme-toggle,
 .theme-pill {
   display: flex;
   align-items: center;
@@ -202,8 +217,9 @@ button, input, select, textarea {
   padding: 2px;
   gap: 2px;
 }
+.theme-btn,
 .tp-btn {
-  padding: 3px 9px;
+  padding: 4px 10px;
   border-radius: 6px;
   font-size: 11px;
   font-weight: 500;
@@ -213,13 +229,16 @@ button, input, select, textarea {
   cursor: pointer;
   transition: all 0.15s;
 }
+.theme-btn:hover,
 .tp-btn:hover {
   color: var(--text);
 }
+.theme-btn.active,
 .tp-btn.active {
   background: var(--brand);
   color: #fff;
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
 }
 
 /* State Simulator Button */

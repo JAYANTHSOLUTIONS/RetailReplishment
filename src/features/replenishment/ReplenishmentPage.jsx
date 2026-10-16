@@ -489,7 +489,7 @@ export default function ReplenishmentPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               aria-label="Search items or supplier"
             />
-            <kbd className="search-kbd">⌘K</kbd>
+            <kbd className="search-kbd">Ctrl+K</kbd>
           </div>
         </div>
 
