@@ -274,6 +274,11 @@ export default function ReplenishmentPage() {
   // Toast feedback
   const [toast, setToast] = useState(null);
 
+  // Keyboard navigation focus and refs
+  const [focusedRowIndex, setFocusedRowIndex] = useState(0);
+  const searchInputRef = useRef(null);
+  const tableRef = useRef(null);
+
   // Listen to ?state= URL query parameter on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -380,6 +385,87 @@ export default function ReplenishmentPage() {
     }
     return list;
   }, [filteredProducts, sortBy]);
+
+  // Map each product ID to its flat index in sortedProducts for keyboard navigation
+  const globalRowIndices = useMemo(() => {
+    const map = {};
+    sortedProducts.forEach((p, idx) => {
+      map[p.id] = idx;
+    });
+    return map;
+  }, [sortedProducts]);
+
+  // Global & Table Keyboard Navigation Shortcuts
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
+
+      // Windows Ctrl+K (or Mac Cmd+K) to focus global search
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+
+      // Windows Ctrl+S (or Mac Cmd+S) to save draft
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveDraft();
+        return;
+      }
+
+      // Escape key handler
+      if (e.key === 'Escape') {
+        if (showUnsavedModal) {
+          cancelDiscardUnsaved();
+          return;
+        }
+        if (stateDropdownOpen) {
+          setStateDropdownOpen(false);
+          return;
+        }
+        if (isUnsaved) {
+          handleCancelInlineQty();
+          return;
+        }
+      }
+
+      // If active inside an input, don't hijack table arrow keys
+      if (isInput) return;
+
+      // Table navigation: ArrowDown, ArrowUp, Space, Enter, F2, Home, End
+      if (sortedProducts.length === 0) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setFocusedRowIndex((prev) => (prev >= sortedProducts.length - 1 ? 0 : prev + 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocusedRowIndex((prev) => (prev <= 0 ? sortedProducts.length - 1 : prev - 1));
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        const current = sortedProducts[focusedRowIndex];
+        if (current) handleToggleSelect(current.id);
+      } else if (e.key === 'Enter' || e.key === 'F2') {
+        e.preventDefault();
+        const current = sortedProducts[focusedRowIndex];
+        if (current) {
+          setEditingSku(current.sku);
+          setEditQtyValue(String(current.orderQty));
+          setIsUnsaved(false);
+        }
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        setFocusedRowIndex(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        setFocusedRowIndex(sortedProducts.length - 1);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [sortedProducts, focusedRowIndex, isUnsaved, showUnsavedModal, stateDropdownOpen]);
 
   // Group products by priority
   const criticalItems = sortedProducts.filter((p) => p.priority === 'critical');
@@ -531,6 +617,7 @@ export default function ReplenishmentPage() {
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
             <input
+              ref={searchInputRef}
               type="text"
               className="search-input"
               placeholder="Search SKU, item name, supplier..."
@@ -1092,10 +1179,16 @@ export default function ReplenishmentPage() {
                         const lineSubtotal = prod.orderQty * prod.unitCost;
                         const isEditingThis = editingSku === prod.sku;
 
+                        const globalIdx = globalRowIndices[prod.id];
+                        const isRowFocused = focusedRowIndex === globalIdx;
+
                         return (
                           <tr
                             key={prod.id}
-                            className={`pr ${prod.selected ? 'sel' : ''}`}
+                            className={`pr ${prod.selected ? 'sel' : ''} ${isRowFocused ? 'focused' : ''}`}
+                            tabIndex={0}
+                            onFocus={() => setFocusedRowIndex(globalIdx)}
+                            onClick={() => setFocusedRowIndex(globalIdx)}
                           >
                             <td className="col-chk">
                               <input
@@ -1196,10 +1289,16 @@ export default function ReplenishmentPage() {
                         const lineSubtotal = prod.orderQty * prod.unitCost;
                         const isEditingThis = editingSku === prod.sku;
 
+                        const globalIdx = globalRowIndices[prod.id];
+                        const isRowFocused = focusedRowIndex === globalIdx;
+
                         return (
                           <tr
                             key={prod.id}
-                            className={`pr ${prod.selected ? 'sel' : ''}`}
+                            className={`pr ${prod.selected ? 'sel' : ''} ${isRowFocused ? 'focused' : ''}`}
+                            tabIndex={0}
+                            onFocus={() => setFocusedRowIndex(globalIdx)}
+                            onClick={() => setFocusedRowIndex(globalIdx)}
                           >
                             <td className="col-chk">
                               <input
@@ -1299,10 +1398,16 @@ export default function ReplenishmentPage() {
                         const lineSubtotal = prod.orderQty * prod.unitCost;
                         const isEditingThis = editingSku === prod.sku;
 
+                        const globalIdx = globalRowIndices[prod.id];
+                        const isRowFocused = focusedRowIndex === globalIdx;
+
                         return (
                           <tr
                             key={prod.id}
-                            className={`pr ${prod.selected ? 'sel' : ''}`}
+                            className={`pr ${prod.selected ? 'sel' : ''} ${isRowFocused ? 'focused' : ''}`}
+                            tabIndex={0}
+                            onFocus={() => setFocusedRowIndex(globalIdx)}
+                            onClick={() => setFocusedRowIndex(globalIdx)}
                           >
                             <td className="col-chk">
                               <input
