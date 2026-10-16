@@ -99,7 +99,9 @@ button, input, select, textarea {
   grid-template-columns: 52px 260px 1fr 320px;
   overflow: hidden;
   min-width: 0;
+  min-height: 0;
   height: calc(100vh - 52px);
+  max-height: calc(100vh - 52px);
 }
 
 /* ─── Top Bar ────────────────────────────────────────────────────────────── */
@@ -241,16 +243,16 @@ button, input, select, textarea {
   box-shadow: 0 1px 2px rgba(0,0,0,0.08);
 }
 
-/* State Simulator Button */
+/* State Simulator Button & Dropdown Menu */
 .state-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 6px 12px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
-  color: var(--text2);
+  color: var(--text);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -259,6 +261,63 @@ button, input, select, textarea {
 .state-btn:hover {
   border-color: var(--brand);
   color: var(--text);
+  background: var(--surface);
+}
+
+.state-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+  z-index: 70;
+  min-width: 200px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: modalFadeIn 0.12s ease-out;
+}
+.state-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.state-item:hover {
+  background: var(--bg);
+  color: var(--brand);
+}
+.state-item.active {
+  background: var(--brand-bg);
+  color: var(--brand);
+  font-weight: 600;
+}
+.state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.state-label {
+  flex: 1;
+}
+.state-check {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand);
 }
 
 /* User profile */
@@ -612,6 +671,8 @@ button, input, select, textarea {
   flex-direction: column;
   overflow: hidden;
   height: 100%;
+  min-height: 0;
+  min-width: 0;
 }
 
 .matrix-head {
@@ -742,9 +803,11 @@ button, input, select, textarea {
 
 /* ─── Table ──────────────────────────────────────────────────────────────── */
 .tbl-wrap {
-  flex: 1;
+  flex: 1 1 0;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
+  min-height: 0;
+  max-height: 100%;
 }
 .tbl {
   width: 100%;
@@ -1322,4 +1385,163 @@ button, input, select, textarea {
 @keyframes fadeIn {
   from { opacity: 0; transform: translate(-50%, 8px); }
   to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ─── State Boxes (Empty, No Results, Error) ──────────────────────────────── */
+.state-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  background: #ffffff;
+  min-height: 280px;
+}
+.state-icon {
+  font-size: 38px;
+  margin-bottom: 14px;
+}
+.state-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 8px;
+}
+.state-body {
+  font-size: 13px;
+  color: #64748b;
+  max-width: 420px;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+.retry-btn {
+  padding: 9px 18px;
+  border-radius: 7px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.retry-btn:hover {
+  background: #1d4ed8;
+}
+
+/* ─── Skeleton Loading ────────────────────────────────────────────────────── */
+.skel-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+}
+.skel-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 38px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.skel-cell {
+  height: 16px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: skelShimmer 1.5s infinite;
+}
+.skel-xs { width: 32px; }
+.skel-sm { width: 68px; }
+.skel-md { width: 110px; }
+.skel-lg { flex: 1; }
+@keyframes skelShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ─── Unsaved Changes Confirmation Modal ──────────────────────────────────── */
+.confirm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: modalFadeIn 0.15s ease-out;
+}
+.confirm-modal {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08);
+  animation: modalScaleUp 0.15s ease-out;
+}
+.confirm-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.confirm-modal-icon {
+  font-size: 24px;
+}
+.confirm-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.confirm-modal-body {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+  margin-bottom: 22px;
+}
+.confirm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.btn-cancel {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-cancel:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+.btn-danger {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-danger:hover {
+  background: #b91c1c;
+}
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modalScaleUp {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }

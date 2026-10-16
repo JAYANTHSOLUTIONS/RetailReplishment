@@ -249,7 +249,7 @@ const formatCurrency = (val) => `₹${Number(val).toLocaleString('en-IN')}`;
 export default function ReplenishmentPage() {
   // Theme state: 'light' | 'dark' | 'system'
   const [theme, setTheme] = useState('light');
-  // View State simulator: 'default' | 'loading' | 'empty' | 'error'
+  // View State simulator: 'default' | 'loading' | 'empty' | 'no_results' | 'error'
   const [appState, setAppState] = useState('default');
   const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
 
@@ -267,8 +267,21 @@ export default function ReplenishmentPage() {
   const [editQtyValue, setEditQtyValue] = useState('50');
   const [isUnsaved, setIsUnsaved] = useState(true);
 
+  // Unsaved Changes Confirmation Modal state
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
+
   // Toast feedback
   const [toast, setToast] = useState(null);
+
+  // Listen to ?state= URL query parameter on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const qState = params.get('state');
+    if (qState && ['default', 'loading', 'empty', 'no_results', 'error'].includes(qState.toLowerCase())) {
+      setAppState(qState.toLowerCase());
+    }
+  }, []);
 
   // Synchronize theme with data-theme attribute on documentElement
   useEffect(() => {
@@ -281,9 +294,56 @@ export default function ReplenishmentPage() {
     }
   }, [theme]);
 
+  // Click outside listener for state dropdown
+  useEffect(() => {
+    if (!stateDropdownOpen) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.state-dropdown-wrap')) {
+        setStateDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [stateDropdownOpen]);
+
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  // Safe action check: prompt confirmation modal if changes are unsaved
+  const requestActionWithUnsavedCheck = (action) => {
+    if (isUnsaved) {
+      setPendingAction(() => action);
+      setShowUnsavedModal(true);
+    } else {
+      action();
+    }
+  };
+
+  const confirmDiscardUnsaved = () => {
+    const original = products.find((p) => p.sku === editingSku);
+    if (original) {
+      setEditQtyValue(String(original.orderQty));
+    }
+    setIsUnsaved(false);
+    setShowUnsavedModal(false);
+    if (pendingAction) {
+      pendingAction();
+      setPendingAction(null);
+    }
+    showToast('Unsaved changes discarded.');
+  };
+
+  const cancelDiscardUnsaved = () => {
+    setShowUnsavedModal(false);
+    setPendingAction(null);
+  };
+
+  const handleDiscardChanges = () => {
+    requestActionWithUnsavedCheck(() => {
+      confirmDiscardUnsaved();
+    });
   };
 
   const currentSupplier = useMemo(() => {
@@ -402,11 +462,9 @@ export default function ReplenishmentPage() {
   };
 
   const handleCancelInlineQty = () => {
-    const original = products.find((p) => p.sku === editingSku);
-    if (original) {
-      setEditQtyValue(String(original.orderQty));
-    }
-    setIsUnsaved(false);
+    requestActionWithUnsavedCheck(() => {
+      confirmDiscardUnsaved();
+    });
   };
 
   // Handler: Apply Supplier Minimums
@@ -448,15 +506,6 @@ export default function ReplenishmentPage() {
   // Handler: Save Draft
   const handleSaveDraft = () => {
     showToast(`Draft #PO-2026-104 saved.`);
-  };
-
-  // Handler: Discard Changes
-  const handleDiscardChanges = () => {
-    setProducts(INITIAL_PRODUCTS);
-    setEditQtyValue('50');
-    setIsUnsaved(true);
-    setEditingSku('HF-001');
-    showToast('Changes discarded. Restored original values.', 'info');
   };
 
   return (
@@ -517,57 +566,44 @@ export default function ReplenishmentPage() {
           </div>
 
           {/* State switcher dropdown */}
-          <div style={{ position: 'relative' }}>
+          <div className="state-dropdown-wrap" style={{ position: 'relative' }}>
             <button
               className="state-btn"
               onClick={() => setStateDropdownOpen((prev) => !prev)}
               aria-haspopup="true"
               aria-expanded={stateDropdownOpen}
+              aria-label="Simulate application state"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M10 2v7.31L4.69 16A4 4 0 0 0 7.8 22h8.4a4 4 0 0 0 3.11-6L14 9.31V2"></path>
                 <line x1="8" y1="2" x2="16" y2="2"></line>
               </svg>
-              <span>State: {appState.charAt(0).toUpperCase() + appState.slice(1)}</span>
+              <span>State: {appState === 'no_results' ? 'No Results' : appState.charAt(0).toUpperCase() + appState.slice(1)}</span>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="m6 9 6 6 6-6"/>
               </svg>
             </button>
             {stateDropdownOpen && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: 4,
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  boxShadow: 'var(--shadow-md)',
-                  zIndex: 50,
-                  minWidth: 140,
-                  overflow: 'hidden',
-                }}
-              >
-                {['default', 'loading', 'empty', 'error'].map((st) => (
+              <div className="state-menu" role="menu">
+                {[
+                  { id: 'default', label: 'Default', color: '#2563eb' },
+                  { id: 'loading', label: 'Loading', color: '#f59e0b' },
+                  { id: 'empty', label: 'Empty (No Reorders)', color: '#64748b' },
+                  { id: 'no_results', label: 'No Results (Filter)', color: '#ea580c' },
+                  { id: 'error', label: 'Error (API Down)', color: '#dc2626' },
+                ].map((st) => (
                   <button
-                    key={st}
+                    key={st.id}
+                    className={`state-item ${appState === st.id ? 'active' : ''}`}
                     onClick={() => {
-                      setAppState(st);
+                      setAppState(st.id);
                       setStateDropdownOpen(false);
                     }}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      padding: '8px 12px',
-                      textAlign: 'left',
-                      fontSize: 12,
-                      background: appState === st ? 'var(--brand-bg)' : 'transparent',
-                      color: appState === st ? 'var(--brand)' : 'var(--text)',
-                      fontWeight: appState === st ? 600 : 400,
-                    }}
+                    role="menuitem"
                   >
-                    {st.charAt(0).toUpperCase() + st.slice(1)}
+                    <span className="state-dot" style={{ background: st.color }}></span>
+                    <span className="state-label">{st.label}</span>
+                    {appState === st.id && <span className="state-check">✓</span>}
                   </button>
                 ))}
               </div>
@@ -665,7 +701,7 @@ export default function ReplenishmentPage() {
                   <div
                     key={sup.id}
                     className={`sc ${isActive ? 'active' : ''}`}
-                    onClick={() => setSelectedSupplierId(sup.id)}
+                    onClick={() => requestActionWithUnsavedCheck(() => setSelectedSupplierId(sup.id))}
                     tabIndex={0}
                     role="button"
                     aria-pressed={isActive}
@@ -722,7 +758,7 @@ export default function ReplenishmentPage() {
                   <div
                     key={sup.id}
                     className={`sc ${isActive ? 'active' : ''}`}
-                    onClick={() => setSelectedSupplierId(sup.id)}
+                    onClick={() => requestActionWithUnsavedCheck(() => setSelectedSupplierId(sup.id))}
                     tabIndex={0}
                     role="button"
                     aria-pressed={isActive}
@@ -771,7 +807,7 @@ export default function ReplenishmentPage() {
                 <div
                   key={sup.id}
                   className={`sc ${isActive ? 'active' : ''}`}
-                  onClick={() => setSelectedSupplierId(sup.id)}
+                  onClick={() => requestActionWithUnsavedCheck(() => setSelectedSupplierId(sup.id))}
                   tabIndex={0}
                   role="button"
                   aria-pressed={isActive}
@@ -939,16 +975,18 @@ export default function ReplenishmentPage() {
             </button>
           </div>
 
-          {/* Conditional Views: Loading, Empty, Error, or Table */}
+          {/* Conditional Views: Loading, Empty, No Results, Error, or Table */}
           {appState === 'loading' && (
             <div className="tbl-wrap">
-              <div className="skel-rows">
-                {[1, 2, 3, 4, 5, 6].map((idx) => (
+              <div className="skel-wrap">
+                {[1, 2, 3, 4, 5, 6, 7].map((idx) => (
                   <div key={idx} className="skel-row">
+                    <div className="skel-cell skel-xs"></div>
                     <div className="skel-cell skel-sm"></div>
-                    <div className="skel-cell skel-md"></div>
                     <div className="skel-cell skel-lg"></div>
                     <div className="skel-cell skel-sm"></div>
+                    <div className="skel-cell skel-sm"></div>
+                    <div className="skel-cell skel-md"></div>
                     <div className="skel-cell skel-sm"></div>
                     <div className="skel-cell skel-md"></div>
                   </div>
@@ -973,9 +1011,28 @@ export default function ReplenishmentPage() {
             </div>
           )}
 
+          {appState === 'no_results' && (
+            <div className="state-box">
+              <div className="state-icon">🔍</div>
+              <h3 className="state-title">No Matching Replenishment Items</h3>
+              <p className="state-body">
+                No products match the applied search filter criteria. Clear filters to see full catalog.
+              </p>
+              <button
+                className="retry-btn"
+                onClick={() => {
+                  setSearchTerm('');
+                  setAppState('default');
+                }}
+              >
+                Clear Search & Reset
+              </button>
+            </div>
+          )}
+
           {appState === 'error' && (
             <div className="state-box">
-              <div className="state-icon" style={{ color: 'var(--c-critical)' }}>⚠️</div>
+              <div className="state-icon">⚠️</div>
               <h3 className="state-title">Unable to Load Replenishment Data</h3>
               <p className="state-body">
                 Connection to JSON data store timed out. Check network or server configuration.
@@ -1473,6 +1530,29 @@ export default function ReplenishmentPage() {
           </div>
         </aside>
       </div>
+
+      {/* ─── Unsaved Changes Confirmation Modal ──────────────────────────── */}
+      {showUnsavedModal && (
+        <div className="confirm-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="unsaved-modal-title">
+          <div className="confirm-modal">
+            <div className="confirm-modal-header">
+              <span className="confirm-modal-icon">⚠️</span>
+              <h3 id="unsaved-modal-title" className="confirm-modal-title">Discard Unsaved Changes?</h3>
+            </div>
+            <p className="confirm-modal-body">
+              You have modified the order quantity for SKU <strong>{editingSku}</strong>. If you proceed without saving, your modifications will be discarded.
+            </p>
+            <div className="confirm-modal-actions">
+              <button className="btn-cancel" onClick={cancelDiscardUnsaved}>
+                Keep Editing
+              </button>
+              <button className="btn-danger" onClick={confirmDiscardUnsaved}>
+                Discard Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Toast Feedback Notification ──────────────────────────────────── */}
       {toast && (
