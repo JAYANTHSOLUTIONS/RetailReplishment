@@ -1,0 +1,111 @@
+{
+  "products": [
+    {
+      "id": "p1",
+      "sku": "SKU-001",
+      "name": "Widget A",
+      "supplierId": "s1",
+      "supplierName": "Acme Supplies",
+      "currentStock": 4,
+      "reorderPoint": 20,
+      "dailySales": 3,
+      "unitCost": 12.5,
+      "status": "critical",
+      "priority": "critical",
+      "orderQty": 0
+    },
+    {
+      "id": "p2",
+      "sku": "SKU-002",
+      "name": "Gadget B",
+      "supplierId": "s1",
+      "supplierName": "Acme Supplies",
+      "currentStock": 15,
+      "reorderPoint": 20,
+      "dailySales": 2,
+      "unitCost": 8.0,
+      "status": "low",
+      "priority": "high",
+      "orderQty": 0
+    },
+    {
+      "id": "p3",
+      "sku": "SKU-003",
+      "name": "Doohickey C",
+      "supplierId": "s2",
+      "supplierName": "Beta Distributors",
+      "currentStock": 50,
+      "reorderPoint": 30,
+      "dailySales": 4,
+      "unitCost": 22.0,
+      "status": "ok",
+      "priority": "medium",
+      "orderQty": 0
+    },
+    {
+      "id": "p4",
+      "sku": "SKU-004",
+      "name": "Thingamajig D",
+      "supplierId": "s2",
+      "supplierName": "Beta Distributors",
+      "currentStock": 200,
+      "reorderPoint": 50,
+      "dailySales": 5,
+      "unitCost": 5.75,
+      "status": "ok",
+      "priority": "low",
+      "orderQty": 0
+    },
+    {
+      "id": "p5",
+      "sku": "SKU-005",
+      "name": "Gizmo E",
+      "supplierId": "s3",
+      "supplierName": "Gamma Global",
+      "currentStock": 0,
+      "reorderPoint": 10,
+      "dailySales": 1,
+      "unitCost": 45.0,
+      "status": "critical",
+      "priority": "critical",
+      "orderQty": 0
+    },
+    {
+      "id": "p6",
+      "sku": "SKU-006",
+      "name": "Whatsit F",
+      "supplierId": "s3",
+      "supplierName": "Gamma Global",
+      "currentStock": 8,
+      "reorderPoint": 10,
+      "dailySales": 1,
+      "unitCost": 17.5,
+      "status": "low",
+      "priority": "high",
+      "orderQty": 0
+    }
+  ],
+  "suppliers": [
+    {
+      "id": "s1",
+      "name": "Acme Supplies",
+      "contactEmail": "orders@acme.example.com",
+      "minimumOrder": 50,
+      "leadTimeDays": 3
+    },
+    {
+      "id": "s2",
+      "name": "Beta Distributors",
+      "contactEmail": "replen@beta.example.com",
+      "minimumOrder": 100,
+      "leadTimeDays": 5
+    },
+    {
+      "id": "s3",
+      "name": "Gamma Global",
+      "contactEmail": "supply@gamma.example.com",
+      "minimumOrder": 25,
+      "leadTimeDays": 7
+    }
+  ]
+}

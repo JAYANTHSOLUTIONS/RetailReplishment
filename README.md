@@ -1,16 +1,34 @@
-# React + Vite
+# Retail Replenishment Desk (StockDesk)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+An enterprise-grade category replenishment and inventory planning desk built with React, Vite, and high-density Vanilla CSS.
 
-Currently, two official plugins are available:
+## Key Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Full-Width Dense Data Table**: Category replenishment matrix spanning 100% viewport width with collapsible priority groups (`CRITICAL`, `LOW`, `HEALTHY`).
+- **Supplier Review Summary Panel**: Slide-over drawer providing real-time MOQ/freight threshold verification, financial summary, and line-item order breakdown.
+- **Windows Keyboard Navigation Path**:
+  - <kbd>↑</kbd> / <kbd>↓</kbd>: Navigate through catalog rows.
+  - <kbd>Space</kbd>: Toggle item selection.
+  - <kbd>F2</kbd> or <kbd>Enter</kbd>: In-place cell quantity editing with autofocus.
+  - <kbd>Ctrl+K</kbd>: Quick jump to search.
+  - <kbd>Ctrl+S</kbd>: Save replenishment draft to local storage.
+  - <kbd>Ctrl+A</kbd>: Select all items in view.
+  - <kbd>Esc</kbd>: Cancel inline editing or dismiss dialogs.
+- **Calculated Priority Rules**: Dynamic categorization based on current stock, safety targets, and deficit sorting.
+- **Supplier & Status Filtering**: Multi-supplier selector and status pills with real-time count badges.
+- **Inline Editing with Unsaved-Change Protection**: Unsaved Changes Dialog intercepts view changes or accidental navigation.
+- **EDI PO Transmission Workflow**: Export as CSV, print manifests, and simulate PO transmission.
+- **Master Test Plan**: Comprehensive documentation in `src/tests/BROWSER_TEST_PLAN.md`.
 
-## React Compiler
+## Getting Started
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+# Install dependencies
+npm install
 
-## Expanding the ESLint configuration
+# Start local dev server
+npm run dev
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+# Production build
+npm run build
+```
