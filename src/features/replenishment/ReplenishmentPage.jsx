@@ -21,8 +21,7 @@ const INITIAL_SUPPLIERS = [
     name: 'Britannia Industries',
     category: 'Snacks & Biscuits',
     initials: 'BI',
-    badge: 'National',
-    badgeType: 'preferred',
+    badge: null,
     targetMoq: 8000,
     unitThreshold: 40,
     leadTime: '4d',
@@ -39,11 +38,12 @@ const INITIAL_SUPPLIERS = [
     unitThreshold: 30,
     leadTime: '1d',
     color: '#16a34a',
+    allHealthy: true,
   },
 ];
 
 const INITIAL_PRODUCTS = [
-  // Heritage Foods
+  // ── Heritage Foods (10 items matching the enterprise screenshot)
   {
     id: 'hf-001',
     sku: 'HF-001',
@@ -175,7 +175,7 @@ const INITIAL_PRODUCTS = [
     selected: false,
   },
 
-  // Britannia Industries
+  // ── Britannia Industries
   {
     id: 'bi-001',
     sku: 'BI-001',
@@ -187,7 +187,7 @@ const INITIAL_PRODUCTS = [
     dailySales: 12,
     orderQty: 50,
     unitCost: 35,
-    selected: false,
+    selected: true,
   },
   {
     id: 'bi-002',
@@ -200,7 +200,7 @@ const INITIAL_PRODUCTS = [
     dailySales: 10,
     orderQty: 40,
     unitCost: 40,
-    selected: false,
+    selected: true,
   },
   {
     id: 'bi-003',
@@ -213,7 +213,7 @@ const INITIAL_PRODUCTS = [
     dailySales: 6,
     orderQty: 25,
     unitCost: 50,
-    selected: false,
+    selected: true,
   },
   {
     id: 'bi-004',
@@ -241,94 +241,115 @@ const INITIAL_PRODUCTS = [
     unitCost: 25,
     selected: false,
   },
+  {
+    id: 'bi-006',
+    sku: 'BI-006',
+    name: 'Treat Jim Jam 100g',
+    category: 'Biscuits',
+    supplierId: 'bi',
+    currentStock: 30,
+    safetyTarget: 35,
+    dailySales: 3,
+    orderQty: 0,
+    unitCost: 30,
+    selected: false,
+  },
 
-  // Nature's Farm
+  // ── Nature's Farm
   {
     id: 'nf-001',
     sku: 'NF-001',
-    name: 'Fresh Organic Apples 1kg',
+    name: 'Organic Cavendish Bananas (1kg)',
     category: 'Fruits',
     supplierId: 'nf',
-    currentStock: 30,
+    currentStock: 45,
     safetyTarget: 40,
-    dailySales: 8,
-    orderQty: 0,
-    unitCost: 140,
-    selected: false,
-  },
-  {
-    id: 'nf-002',
-    sku: 'NF-002',
-    name: 'Baby Spinach 250g',
-    category: 'Vegetables',
-    supplierId: 'nf',
-    currentStock: 24,
-    safetyTarget: 30,
-    dailySales: 6,
+    dailySales: 15,
     orderQty: 0,
     unitCost: 60,
     selected: false,
   },
   {
-    id: 'nf-003',
-    sku: 'NF-003',
-    name: 'Hass Avocado (2 pcs)',
+    id: 'nf-002',
+    sku: 'NF-002',
+    name: 'Alphonso Mangoes (1kg crate)',
     category: 'Fruits',
     supplierId: 'nf',
-    currentStock: 20,
-    safetyTarget: 25,
+    currentStock: 35,
+    safetyTarget: 30,
+    dailySales: 8,
+    orderQty: 0,
+    unitCost: 350,
+    selected: false,
+  },
+  {
+    id: 'nf-003',
+    sku: 'NF-003',
+    name: 'Hass Avocados (500g)',
+    category: 'Fruits',
+    supplierId: 'nf',
+    currentStock: 25,
+    safetyTarget: 20,
     dailySales: 4,
     orderQty: 0,
-    unitCost: 180,
+    unitCost: 220,
+    selected: false,
+  },
+  {
+    id: 'nf-004',
+    sku: 'NF-004',
+    name: 'Hydroponic Baby Spinach (250g)',
+    category: 'Vegetables',
+    supplierId: 'nf',
+    currentStock: 30,
+    safetyTarget: 25,
+    dailySales: 5,
+    orderQty: 0,
+    unitCost: 80,
     selected: false,
   },
 ];
 
-const formatCurrency = (amt) => {
-  return '₹' + Number(amt || 0).toLocaleString('en-IN', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 0,
-  });
-};
+const INITIAL_MANIFESTS = [
+  { id: 'MNF-8491', supplier: 'Heritage Foods', truck: 'KA-04-E-2918', items: 340, eta: 'Today, 4:30 PM', status: 'In Transit' },
+  { id: 'MNF-8488', supplier: 'Britannia Industries', truck: 'DL-01-A-7741', items: 180, eta: 'Tomorrow, 9:00 AM', status: 'Dock Scheduled' },
+  { id: 'MNF-8472', supplier: "Nature's Farm", truck: 'MH-12-Q-3392', items: 210, eta: 'Delivered', status: 'Awaiting Verification' },
+];
+
+const formatCurrency = (val) => `₹${Math.round(Number(val)).toLocaleString('en-IN')}`;
 
 export default function ReplenishmentPage() {
-  // Theme & State
-  const [theme, setTheme] = useState('light');
-  const [appState, setAppState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const p = new URLSearchParams(window.location.search).get('state');
-      if (p) {
-        const s = p.toLowerCase();
-        if (s === 'no_results') return 'empty';
-        if (['loading', 'empty', 'error', 'default'].includes(s)) return s;
-      }
-    }
-    return 'default';
-  });
+  // Theme state
+  const [theme, setTheme] = useState(() => localStorage.getItem('stockdesk_theme') || 'light');
+  // State simulator
+  const [appState, setAppState] = useState('default');
   const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
 
-  // Filters & Sorting
-  const [supplierFilter, setSupplierFilter] = useState('all'); // 'all' or supplierId
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'critical', 'low', 'healthy'
-  const [sortBy, setSortBy] = useState('priority');
-  const [searchTerm, setSearchTerm] = useState('');
+  // Active navigation icon
+  const [activeNav, setActiveNav] = useState('replenishment');
 
-  // Products State
+  // Supplier state
+  const [selectedSupplierId, setSelectedSupplierId] = useState('hf');
+  const [queueCollapsed, setQueueCollapsed] = useState(false);
+
+  // Filters
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'critical' | 'low' | 'healthy'
+  const [sortBy, setSortBy] = useState('priority');
+  const [showAllSuppliers, setShowAllSuppliers] = useState(false);
+
+  // Products state
   const [products, setProducts] = useState(INITIAL_PRODUCTS);
 
-  // Summary Drawer (Panel) State
-  const [summaryDrawerOpen, setSummaryDrawerOpen] = useState(false);
-  const [activeSummarySupplierId, setActiveSummarySupplierId] = useState('all');
-
-  // Keyboard Navigation Focus State
+  // Keyboard navigation row focus index
   const [focusedRowIndex, setFocusedRowIndex] = useState(null);
 
-  // Inline Editing State
-  const [editingSku, setEditingSku] = useState(null);
-  const [editQtyValue, setEditQtyValue] = useState('');
-  const [isUnsaved, setIsUnsaved] = useState(false);
+  // Inline editing state
+  const [editingSku, setEditingSku] = useState('HF-001');
+  const [editQtyValue, setEditQtyValue] = useState('50');
+  const [isUnsaved, setIsUnsaved] = useState(true);
 
-  // Unsaved Changes Confirmation Dialog
+  // Unsaved changes confirmation dialog state
   const [unsavedDialog, setUnsavedDialog] = useState({
     open: false,
     pendingAction: null,
@@ -338,109 +359,117 @@ export default function ReplenishmentPage() {
     draftQty: 0,
   });
 
-  // Collapsed Priority Groups
+  // Collapsed priority groups
   const [collapsedGroups, setCollapsedGroups] = useState({
     critical: false,
     low: false,
     healthy: false,
   });
 
-  // Modals & Popovers
+  // Dropdown menus
   const [batchMenuOpen, setBatchMenuOpen] = useState(false);
+  const [poMoreMenuOpen, setPoMoreMenuOpen] = useState(false);
+
+  // Modals
+  const [createPoModalOpen, setCreatePoModalOpen] = useState(false);
+  const [manifestsModalOpen, setManifestsModalOpen] = useState(false);
   const [poSuccessModalOpen, setPoSuccessModalOpen] = useState(false);
+
+  // Form states for manual PO creation
+  const [newPoSupplier, setNewPoSupplier] = useState('hf');
+  const [newPoDock, setNewPoDock] = useState('Dock B - Cold Storage');
+  const [newPoNotes, setNewPoNotes] = useState('');
+
+  // Toast feedback
   const [toast, setToast] = useState(null);
-
   const searchInputRef = useRef(null);
-  const tableWrapRef = useRef(null);
+  const tableRef = useRef(null);
 
-  // Toast feedback helper
-  const showToast = (message, type = 'normal') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3200);
-  };
-
-  // Sync Theme
+  // Synchronize theme with data-theme attribute on documentElement
   useEffect(() => {
+    const root = document.documentElement;
+    localStorage.setItem('stockdesk_theme', theme);
     if (theme === 'system') {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+      root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
     } else {
-      document.documentElement.setAttribute('data-theme', theme);
+      root.setAttribute('data-theme', theme);
     }
   }, [theme]);
 
-  // Guard action against unsaved inline edits
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  // Guard function to intercept navigation or context changes when unsaved edits exist
   const withUnsavedGuard = (action) => {
     if (editingSku && isUnsaved) {
       const item = products.find((p) => p.sku === editingSku);
       setUnsavedDialog({
         open: true,
-        pendingAction: () => action(),
+        pendingAction: action,
         sku: editingSku,
         name: item ? item.name : editingSku,
         originalQty: item ? item.orderQty : 0,
-        draftQty: Number(editQtyValue) || 0,
+        draftQty: parseInt(editQtyValue, 10) || 0,
       });
-      return;
+      return false;
     }
     action();
+    return true;
   };
 
-  const handleResolveSaveProceed = () => {
+  // Resolve unsaved dialog: save & proceed
+  const handleResolveSaveAndProceed = () => {
     if (unsavedDialog.sku) {
-      const num = Math.max(0, parseInt(unsavedDialog.draftQty, 10) || 0);
-      setProducts((prev) =>
-        prev.map((p) => (p.sku === unsavedDialog.sku ? { ...p, orderQty: num, selected: num > 0 } : p))
-      );
+      handleSaveInlineQty(unsavedDialog.sku);
     }
-    const nextAction = unsavedDialog.pendingAction;
-    setEditingSku(null);
-    setIsUnsaved(false);
+    const act = unsavedDialog.pendingAction;
     setUnsavedDialog({ open: false, pendingAction: null, sku: null, name: '', originalQty: 0, draftQty: 0 });
-    if (nextAction) nextAction();
-    showToast(`Saved ${unsavedDialog.sku} and proceeded.`);
+    if (act) act();
   };
 
-  const handleResolveDiscardProceed = () => {
-    const nextAction = unsavedDialog.pendingAction;
-    setEditingSku(null);
-    setIsUnsaved(false);
+  // Resolve unsaved dialog: discard & proceed
+  const handleResolveDiscardAndProceed = () => {
+    handleCancelInlineQty();
+    const act = unsavedDialog.pendingAction;
     setUnsavedDialog({ open: false, pendingAction: null, sku: null, name: '', originalQty: 0, draftQty: 0 });
-    if (nextAction) nextAction();
-    showToast(`Discarded unsaved changes.`);
+    if (act) act();
   };
 
+  // Resolve unsaved dialog: keep editing
   const handleResolveKeepEditing = () => {
     setUnsavedDialog({ open: false, pendingAction: null, sku: null, name: '', originalQty: 0, draftQty: 0 });
   };
 
-  // Global Keyboard Shortcuts (Windows adapted: Ctrl+K, Ctrl+S, Esc)
+  // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         searchInputRef.current?.focus();
-        searchInputRef.current?.select();
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         handleSaveDraft();
       }
       if (e.key === 'Escape') {
-        if (unsavedDialog.open) {
-          handleResolveKeepEditing();
-        } else if (summaryDrawerOpen) {
-          setSummaryDrawerOpen(false);
-        } else if (batchMenuOpen) {
-          setBatchMenuOpen(false);
-        } else if (editingSku) {
-          handleCancelInlineQty();
-        }
+        setBatchMenuOpen(false);
+        setPoMoreMenuOpen(false);
+        setStateDropdownOpen(false);
+        setCreatePoModalOpen(false);
+        setManifestsModalOpen(false);
+        if (unsavedDialog.open) handleResolveKeepEditing();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [unsavedDialog.open, summaryDrawerOpen, batchMenuOpen, editingSku, isUnsaved]);
+  }, [unsavedDialog.open]);
+
+  const currentSupplier = useMemo(() => {
+    return INITIAL_SUPPLIERS.find((s) => s.id === selectedSupplierId) || INITIAL_SUPPLIERS[0];
+  }, [selectedSupplierId]);
 
   // Dynamically calculate priorities using calculated priority rules
   const enrichedProducts = useMemo(() => {
@@ -449,17 +478,24 @@ export default function ReplenishmentPage() {
       return {
         ...p,
         priority: derivedPriority,
+        status: derivedPriority,
       };
     });
   }, [products]);
 
-  // Filter products by Supplier, Status, and Search query
+  // Filter products by supplier, status, and search query
+  const supplierProducts = useMemo(() => {
+    if (showAllSuppliers) return enrichedProducts;
+    return enrichedProducts.filter((p) => p.supplierId === selectedSupplierId);
+  }, [enrichedProducts, selectedSupplierId, showAllSuppliers]);
+
   const filteredProducts = useMemo(() => {
-    return enrichedProducts.filter((p) => {
-      if (supplierFilter !== 'all' && p.supplierId !== supplierFilter) return false;
+    return supplierProducts.filter((p) => {
+      // Status filter
       if (statusFilter !== 'all' && p.priority !== statusFilter) return false;
 
-      const q = searchTerm.toLowerCase().trim();
+      // Text search
+      const q = searchTerm.toLowerCase();
       if (!q) return true;
       return (
         p.name.toLowerCase().includes(q) ||
@@ -467,7 +503,7 @@ export default function ReplenishmentPage() {
         p.category.toLowerCase().includes(q)
       );
     });
-  }, [enrichedProducts, supplierFilter, statusFilter, searchTerm]);
+  }, [supplierProducts, statusFilter, searchTerm]);
 
   // Sort products with default priority sorting
   const sortedProducts = useMemo(() => {
@@ -488,15 +524,15 @@ export default function ReplenishmentPage() {
     return list;
   }, [filteredProducts, sortBy]);
 
-  // Priority groups
+  // Group products by priority
   const criticalItems = sortedProducts.filter((p) => p.priority === 'critical');
   const lowItems = sortedProducts.filter((p) => p.priority === 'low');
   const healthyItems = sortedProducts.filter((p) => p.priority === 'healthy');
 
-  // Selected items calculations
+  // Selected items calculations for Supplier Review Summary
   const selectedItems = useMemo(() => {
-    return products.filter((p) => p.selected && p.orderQty > 0);
-  }, [products]);
+    return supplierProducts.filter((p) => p.selected && p.orderQty > 0);
+  }, [supplierProducts]);
 
   const totalSelectedUnits = useMemo(() => {
     return selectedItems.reduce((acc, p) => acc + p.orderQty, 0);
@@ -506,73 +542,16 @@ export default function ReplenishmentPage() {
     return selectedItems.reduce((acc, p) => acc + p.orderQty * p.unitCost, 0);
   }, [selectedItems]);
 
-  // In-table selection indicators
-  const tableSelectedItems = useMemo(() => {
-    return sortedProducts.filter((p) => p.selected);
-  }, [sortedProducts]);
-
   const allSelected = useMemo(() => {
-    return sortedProducts.length > 0 && sortedProducts.every((p) => p.selected);
-  }, [sortedProducts]);
+    return supplierProducts.length > 0 && supplierProducts.every((p) => p.selected);
+  }, [supplierProducts]);
 
   const someSelected = useMemo(() => {
-    return sortedProducts.some((p) => p.selected) && !allSelected;
-  }, [sortedProducts, allSelected]);
+    return supplierProducts.some((p) => p.selected) && !allSelected;
+  }, [supplierProducts, allSelected]);
 
-  // Grouped Supplier Drafts for the Review Summary Panel
-  const draftsBySupplier = useMemo(() => {
-    const supplierMap = new Map();
-
-    products.forEach((prod) => {
-      if (!prod.selected) return;
-
-      if (!supplierMap.has(prod.supplierId)) {
-        const supInfo = INITIAL_SUPPLIERS.find((s) => s.id === prod.supplierId) || {
-          id: prod.supplierId,
-          name: prod.supplierId,
-          category: 'General',
-          initials: prod.supplierId.slice(0, 2).toUpperCase(),
-          targetMoq: 5000,
-          unitThreshold: 30,
-          leadTime: '3d',
-          color: '#2563eb',
-        };
-        supplierMap.set(prod.supplierId, {
-          supplier: supInfo,
-          items: [],
-          totalUnits: 0,
-          totalAmount: 0,
-        });
-      }
-
-      const entry = supplierMap.get(prod.supplierId);
-      entry.items.push(prod);
-      entry.totalUnits += prod.orderQty;
-      entry.totalAmount += prod.orderQty * prod.unitCost;
-    });
-
-    return Array.from(supplierMap.values()).map((entry) => {
-      const moqMet = entry.totalAmount >= entry.supplier.targetMoq;
-      const unitsMet = entry.totalUnits >= entry.supplier.unitThreshold;
-      return {
-        ...entry,
-        moqMet,
-        unitsMet,
-      };
-    });
-  }, [products]);
-
-  // Focused supplier in the summary drawer
-  const activeSummaryGroup = useMemo(() => {
-    if (activeSummarySupplierId === 'all' || !activeSummarySupplierId) {
-      return draftsBySupplier[0] || null;
-    }
-    return draftsBySupplier.find((g) => g.supplier.id === activeSummarySupplierId) || draftsBySupplier[0] || null;
-  }, [draftsBySupplier, activeSummarySupplierId]);
-
-  // Keyboard navigation on dense table (Windows: Up/Down, Space, Enter, F2, Home, End, PageUp/Down, Ctrl+A)
+  // Table Keyboard Navigation handler (ArrowUp, ArrowDown, Space, Enter)
   const handleTableKeyDown = (e) => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
     if (sortedProducts.length === 0) return;
 
     if (e.key === 'ArrowDown') {
@@ -585,7 +564,7 @@ export default function ReplenishmentPage() {
       e.preventDefault();
       const current = sortedProducts[focusedRowIndex];
       if (current) handleToggleSelect(current.id);
-    } else if ((e.key === 'Enter' || e.key === 'F2') && focusedRowIndex !== null) {
+    } else if (e.key === 'Enter' && focusedRowIndex !== null) {
       e.preventDefault();
       const current = sortedProducts[focusedRowIndex];
       if (current && editingSku !== current.sku) {
@@ -597,29 +576,65 @@ export default function ReplenishmentPage() {
     } else if (e.key === 'End') {
       e.preventDefault();
       setFocusedRowIndex(sortedProducts.length - 1);
-    } else if (e.key === 'PageDown') {
-      e.preventDefault();
-      setFocusedRowIndex((prev) => {
-        const next = (prev === null ? 0 : prev) + 5;
-        return next >= sortedProducts.length ? sortedProducts.length - 1 : next;
-      });
-    } else if (e.key === 'PageUp') {
-      e.preventDefault();
-      setFocusedRowIndex((prev) => {
-        const next = (prev === null ? 0 : prev) - 5;
-        return next < 0 ? 0 : next;
-      });
-    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-      e.preventDefault();
-      handleToggleSelectAll();
     }
   };
 
+  // Toggle group collapse
   const toggleGroupCollapse = (grp) => {
     setCollapsedGroups((prev) => ({ ...prev, [grp]: !prev[grp] }));
   };
 
-  // Toggle selection
+  // Select all toggle
+  const handleToggleSelectAll = () => {
+    const nextVal = !allSelected;
+    setProducts((prev) =>
+      prev.map((p) => {
+        if (p.supplierId === selectedSupplierId || showAllSuppliers) {
+          return {
+            ...p,
+            selected: nextVal,
+            orderQty: nextVal && p.orderQty === 0 ? Math.max(0, p.safetyTarget - p.currentStock) : p.orderQty,
+          };
+        }
+        return p;
+      })
+    );
+  };
+
+  // Specific selection presets
+  const handleSelectPreset = (preset) => {
+    setBatchMenuOpen(false);
+    setProducts((prev) =>
+      prev.map((p) => {
+        if (!showAllSuppliers && p.supplierId !== selectedSupplierId) return p;
+        let selected = p.selected;
+        let orderQty = p.orderQty;
+
+        if (preset === 'all') {
+          selected = true;
+          if (orderQty === 0) orderQty = Math.max(0, p.safetyTarget - p.currentStock);
+        } else if (preset === 'none') {
+          selected = false;
+        } else if (preset === 'critical') {
+          selected = p.priority === 'critical';
+          if (selected && orderQty === 0) orderQty = Math.max(0, p.safetyTarget - p.currentStock);
+        } else if (preset === 'low') {
+          selected = p.priority === 'low';
+          if (selected && orderQty === 0) orderQty = Math.max(0, p.safetyTarget - p.currentStock);
+        } else if (preset === 'below_safety') {
+          selected = p.currentStock < p.safetyTarget;
+          if (selected && orderQty === 0) orderQty = Math.max(0, p.safetyTarget - p.currentStock);
+        } else if (preset === 'invert') {
+          selected = !selected;
+        }
+
+        return { ...p, selected, orderQty };
+      })
+    );
+    showToast(`Updated selection preset: ${preset}`);
+  };
+
+  // Individual select toggle
   const handleToggleSelect = (id) => {
     setProducts((prev) =>
       prev.map((p) => {
@@ -627,7 +642,7 @@ export default function ReplenishmentPage() {
           const nextSelected = !p.selected;
           let nextQty = p.orderQty;
           if (nextSelected && p.orderQty === 0) {
-            nextQty = Math.max(10, p.safetyTarget - p.currentStock);
+            nextQty = Math.max(0, p.safetyTarget - p.currentStock);
           }
           return { ...p, selected: nextSelected, orderQty: nextQty };
         }
@@ -636,193 +651,182 @@ export default function ReplenishmentPage() {
     );
   };
 
-  const handleToggleSelectAll = () => {
-    const nextVal = !allSelected;
-    setProducts((prev) =>
-      prev.map((p) => {
-        const isInView = sortedProducts.some((sp) => sp.id === p.id);
-        if (isInView) {
-          return {
-            ...p,
-            selected: nextVal,
-            orderQty: nextVal && p.orderQty === 0 ? Math.max(10, p.safetyTarget - p.currentStock) : p.orderQty,
-          };
-        }
-        return p;
-      })
-    );
-  };
-
-  const handleSelectPreset = (preset) => {
-    setBatchMenuOpen(false);
-    setProducts((prev) =>
-      prev.map((p) => {
-        const isInView = sortedProducts.some((sp) => sp.id === p.id);
-        if (!isInView) return p;
-
-        let selected = p.selected;
-        let orderQty = p.orderQty;
-
-        if (preset === 'all') {
-          selected = true;
-          if (orderQty === 0) orderQty = Math.max(10, p.safetyTarget - p.currentStock);
-        } else if (preset === 'none') {
-          selected = false;
-        } else if (preset === 'critical') {
-          selected = p.priority === 'critical';
-          if (selected && orderQty === 0) orderQty = Math.max(10, p.safetyTarget - p.currentStock);
-        } else if (preset === 'low') {
-          selected = p.priority === 'low';
-          if (selected && orderQty === 0) orderQty = Math.max(10, p.safetyTarget - p.currentStock);
-        } else if (preset === 'below_safety') {
-          selected = p.currentStock < p.safetyTarget;
-          if (selected && orderQty === 0) orderQty = Math.max(10, p.safetyTarget - p.currentStock);
-        } else if (preset === 'invert') {
-          selected = !selected;
-        }
-
-        return { ...p, selected, orderQty };
-      })
-    );
-    showToast(`Updated selection: ${preset}`);
-  };
-
-  // Inline editing actions
+  // Start inline editing for ANY row
   const handleStartEdit = (prod) => {
     setEditingSku(prod.sku);
     setEditQtyValue(String(prod.orderQty));
     setIsUnsaved(false);
   };
 
+  // Save inline quantity edit
   const handleSaveInlineQty = (sku) => {
-    const val = parseInt(editQtyValue, 10);
-    const sanitized = isNaN(val) || val < 0 ? 0 : val;
-
+    const parsed = parseInt(editQtyValue, 10);
+    const validQty = isNaN(parsed) || parsed < 0 ? 0 : parsed;
     setProducts((prev) =>
       prev.map((p) => {
         if (p.sku === sku) {
           return {
             ...p,
-            orderQty: sanitized,
-            selected: sanitized > 0 ? true : p.selected,
+            orderQty: validQty,
+            selected: validQty > 0,
           };
         }
         return p;
       })
     );
-    setEditingSku(null);
     setIsUnsaved(false);
-    showToast(`Updated ${sku} quantity to ${sanitized} units.`);
+    showToast(`Updated ${sku} quantity to ${validQty} units.`);
   };
 
+  // Cancel inline quantity edit
   const handleCancelInlineQty = () => {
     const original = products.find((p) => p.sku === editingSku);
     if (original) {
       setEditQtyValue(String(original.orderQty));
     }
-    setEditingSku(null);
     setIsUnsaved(false);
   };
 
-  // Apply supplier minimums
+  // Apply Supplier Minimums
   const handleApplySupplierMinimums = () => {
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.selected) {
-          const sup = INITIAL_SUPPLIERS.find((s) => s.id === p.supplierId);
-          const minQty = sup ? Math.max(15, Math.ceil(sup.unitThreshold / 3)) : 20;
-          return { ...p, orderQty: Math.max(p.orderQty, minQty) };
+    setProducts((prev) => {
+      let updated = prev.map((p) => {
+        if (p.supplierId === selectedSupplierId) {
+          const deficit = Math.max(0, p.safetyTarget - p.currentStock);
+          return {
+            ...p,
+            selected: deficit > 0,
+            orderQty: deficit,
+          };
         }
         return p;
-      })
-    );
-    showToast('Applied supplier minimums across active selections.');
+      });
+
+      const currentSum = updated
+        .filter((p) => p.supplierId === selectedSupplierId && p.selected)
+        .reduce((sum, p) => sum + p.orderQty * p.unitCost, 0);
+
+      if (currentSum < currentSupplier.targetMoq) {
+        const target = currentSupplier.targetMoq;
+        const diff = target - currentSum;
+        const boostItem = updated.find((p) => p.supplierId === selectedSupplierId && p.priority === 'critical');
+        if (boostItem) {
+          const extraUnits = Math.ceil(diff / boostItem.unitCost);
+          updated = updated.map((p) =>
+            p.id === boostItem.id
+              ? { ...p, orderQty: p.orderQty + extraUnits, selected: true }
+              : p
+          );
+        }
+      }
+
+      return updated;
+    });
+
+    showToast(`Applied safety thresholds & MOQ minimums for ${currentSupplier.name}`);
+  };
+
+  // Approve Batch
+  const handleApproveBatch = () => {
+    if (selectedItems.length === 0) {
+      showToast('No items currently selected to approve.', 'warn');
+      return;
+    }
+    showToast(`Batch approved: ${selectedItems.length} SKUs (${totalSelectedUnits} units) ready in PO Draft.`);
   };
 
   // Save Draft
   const handleSaveDraft = () => {
     try {
-      localStorage.setItem('stockdesk_replenishment_draft', JSON.stringify(products));
+      localStorage.setItem('stockdesk_draft_products', JSON.stringify(products));
       const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      showToast(`Replenishment draft saved at ${now}`);
+      showToast(`Draft #PO-2026-104 saved at ${now}`);
     } catch {
-      showToast('Replenishment draft saved.');
+      showToast('Draft #PO-2026-104 saved.');
     }
   };
 
-  // Discard all changes
-  const handleDiscardAll = () => {
+  // Discard Changes
+  const handleDiscardChanges = () => {
     withUnsavedGuard(() => {
       setProducts(INITIAL_PRODUCTS);
-      setEditingSku(null);
-      setIsUnsaved(false);
-      showToast('Restored original replenishment baseline.', 'info');
+      setEditQtyValue('50');
+      setIsUnsaved(true);
+      setEditingSku('HF-001');
+      showToast('Changes discarded. Restored original baseline.', 'info');
     });
   };
 
-  // Export CSV
-  const handleExportCSV = () => {
-    const headers = ['Supplier', 'SKU', 'Item Name', 'Category', 'Units', 'Unit Cost', 'Subtotal'];
-    const rows = selectedItems.map((item) => {
-      const sup = INITIAL_SUPPLIERS.find((s) => s.id === item.supplierId);
-      return [
-        `"${sup ? sup.name : item.supplierId}"`,
-        item.sku,
-        `"${item.name}"`,
-        item.category,
-        item.orderQty,
-        item.unitCost,
-        item.orderQty * item.unitCost,
-      ];
-    });
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `PO_Draft_Summary_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast('Exported PO summary CSV.');
-  };
-
-  const handlePrintManifest = () => {
-    window.print();
-  };
-
-  const handleCopySummary = () => {
-    const text = `Replenishment Summary\nSelected Items: ${selectedItems.length} SKUs (${totalSelectedUnits} units)\nTotal Value: ${formatCurrency(totalSelectedAmount)}`;
-    navigator.clipboard.writeText(text);
-    showToast('Copied PO summary to clipboard.');
-  };
-
+  // Submit PO
   const handleSubmitPO = () => {
     if (selectedItems.length === 0) {
-      showToast('No items selected for purchase order.', 'warn');
+      showToast('Cannot submit empty PO. Select products first.', 'warn');
       return;
     }
     setPoSuccessModalOpen(true);
   };
 
+  // Export CSV
+  const handleExportCSV = () => {
+    setPoMoreMenuOpen(false);
+    const headers = ['SKU', 'Item Name', 'Category', 'Units', 'Unit Cost', 'Subtotal'];
+    const rows = selectedItems.map((item) => [
+      item.sku,
+      `"${item.name}"`,
+      item.category,
+      item.orderQty,
+      item.unitCost,
+      item.orderQty * item.unitCost,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `PO-2026-104_${currentSupplier.name.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Exported PO-2026-104.csv successfully.');
+  };
+
+  // Print Manifest
+  const handlePrintManifest = () => {
+    setPoMoreMenuOpen(false);
+    window.print();
+  };
+
+  // Copy PO Summary
+  const handleCopySummary = () => {
+    setPoMoreMenuOpen(false);
+    const text = `PO Draft #PO-2026-104\nSupplier: ${currentSupplier.name}\nTotal Value: ${formatCurrency(totalSelectedAmount)}\nUnits: ${totalSelectedUnits} units across ${selectedItems.length} SKUs.`;
+    navigator.clipboard.writeText(text);
+    showToast('Copied PO summary to clipboard.');
+  };
+
+  // Create manual PO submit
+  const handleCreatePoSubmit = (e) => {
+    e.preventDefault();
+    setCreatePoModalOpen(false);
+    setSelectedSupplierId(newPoSupplier);
+    showToast(`Created new PO for ${INITIAL_SUPPLIERS.find((s) => s.id === newPoSupplier)?.name}`);
+  };
+
   return (
-    <div className="rp-shell">
-      {/* ─── Top Bar Header ───────────────────────────────────────────────── */}
+    <div className="rp" data-theme={theme}>
+      {/* ─── Top Bar ──────────────────────────────────────────────────────── */}
       <header className="topbar">
         <div className="topbar-brand">
           <div className="brand-logo" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v1"/>
-              <path d="M18 8h4a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-4"/>
-              <circle cx="8" cy="19" r="2"/>
-              <circle cx="18" cy="19" r="2"/>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#0f172a" />
+              <path d="M2 17L12 22L22 17V7L12 12L2 7V17Z" fill="#2563eb" fillOpacity="0.85" />
             </svg>
           </div>
           <span className="brand-name">StockDesk</span>
           <span className="brand-sep">/</span>
-          <span className="brand-page">Retail Replenishment Desk</span>
+          <span className="brand-page">Replenishment Desk</span>
         </div>
 
-        {/* Global Search Bar */}
         <div className="topbar-search">
           <div className="search-wrap" role="search">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -833,10 +837,10 @@ export default function ReplenishmentPage() {
               ref={searchInputRef}
               type="text"
               className="search-input"
-              placeholder="Search SKU, item name, or category..."
+              placeholder="Search SKU, item name, supplier..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              aria-label="Search replenishment items"
+              aria-label="Search items or supplier"
             />
             {searchTerm ? (
               <button
@@ -847,15 +851,15 @@ export default function ReplenishmentPage() {
                 ✕
               </button>
             ) : (
-              <kbd className="search-kbd" onClick={() => searchInputRef.current?.focus()} title="Search items (Ctrl+K)">
-                Ctrl+K
+              <kbd className="search-kbd" onClick={() => searchInputRef.current?.focus()}>
+                ⌘K
               </kbd>
             )}
           </div>
         </div>
 
-        {/* Topbar Controls */}
         <div className="topbar-right">
+          {/* Theme switcher */}
           <div className="theme-toggle" role="group" aria-label="Color theme switcher">
             <button
               className={`theme-btn ${theme === 'light' ? 'active' : ''}`}
@@ -877,7 +881,7 @@ export default function ReplenishmentPage() {
             </button>
           </div>
 
-          {/* State Switcher Dropdown */}
+          {/* State switcher dropdown */}
           <div style={{ position: 'relative' }}>
             <button
               className="state-btn"
@@ -914,644 +918,1180 @@ export default function ReplenishmentPage() {
             )}
           </div>
 
-          {/* User Profile */}
-          <div className="user-btn">
+          {/* User profile */}
+          <button
+            className="user-btn"
+            aria-label="User profile"
+            onClick={() => showToast('Store Manager: Jane Doe (Riverside Mart #104)')}
+          >
             <div className="user-av">SM</div>
             <div className="user-info">
-              <span className="user-name">Store Operations</span>
-              <span className="user-store">Main Depot #104</span>
+              <span className="user-name">Store Manager</span>
+              <span className="user-store">Riverside Mart</span>
             </div>
-          </div>
+          </button>
         </div>
       </header>
 
-      {/* ─── Main Full Width Table Page ───────────────────────────────────── */}
-      <main className="rp-main-full" aria-label="Replenishment Matrix Table">
-        {/* Matrix Header */}
-        <div className="matrix-head">
-          <h1 className="matrix-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <line x1="3" y1="9" x2="21" y2="9"/>
-              <line x1="3" y1="15" x2="21" y2="15"/>
-              <line x1="9" y1="3" x2="9" y2="21"/>
-              <line x1="15" y1="3" x2="15" y2="21"/>
-            </svg>
-            Replenishment Matrix
-          </h1>
-
-          <div className="matrix-head-stats">
-            <span className="head-stat-pill">
-              Total SKUs: <strong>{products.length}</strong>
-            </span>
-            <span className="head-stat-pill">
-              Critical Deficits: <strong>{products.filter((p) => p.priority === 'critical').length}</strong>
-            </span>
+      {/* ─── Main 4-Column Layout ─────────────────────────────────────────── */}
+      <div className="rp-body">
+        {/* Col 1: Icon Navigation Bar */}
+        <nav className="icon-nav" aria-label="Main Navigation">
+          <div className="icon-nav-list">
             <button
-              className={`btn-summary-toggle ${selectedItems.length > 0 ? 'has-selection' : ''}`}
-              onClick={() => setSummaryDrawerOpen(true)}
-              title="Open Supplier Review Summary Panel"
+              className={`icon-nav-btn ${activeNav === 'dashboard' ? 'active' : ''}`}
+              title="Dashboard"
+              onClick={() => {
+                setActiveNav('dashboard');
+                showToast('Navigating to Executive Dashboard...');
+              }}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
+              </svg>
+            </button>
+            <button
+              className={`icon-nav-btn ${activeNav === 'inventory' ? 'active' : ''}`}
+              title="Inventory"
+              onClick={() => {
+                setActiveNav('inventory');
+                showToast('Navigating to Inventory Catalog...');
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect width="20" height="14" x="2" y="7" rx="2" ry="2"/>
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+              </svg>
+            </button>
+            <button
+              className={`icon-nav-btn ${activeNav === 'replenishment' ? 'active' : ''}`}
+              title="Replenishment Desk"
+              onClick={() => {
+                setActiveNav('replenishment');
+                showToast('Replenishment Desk active.');
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+              </svg>
+            </button>
+            <button
+              className={`icon-nav-btn ${activeNav === 'suppliers' ? 'active' : ''}`}
+              title="Suppliers"
+              onClick={() => {
+                setActiveNav('suppliers');
+                showToast('Viewing Supplier Directory...');
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+            </button>
+            <button
+              className={`icon-nav-btn ${activeNav === 'analytics' ? 'active' : ''}`}
+              title="Analytics"
+              onClick={() => {
+                setActiveNav('analytics');
+                showToast('Viewing Stock Analytics...');
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="20" x2="18" y2="10"/>
+                <line x1="12" y1="20" x2="12" y2="4"/>
+                <line x1="6" y1="20" x2="6" y2="14"/>
+              </svg>
+            </button>
+            <button
+              className={`icon-nav-btn ${activeNav === 'settings' ? 'active' : ''}`}
+              title="Settings"
+              onClick={() => {
+                setActiveNav('settings');
+                showToast('Opening Store Settings...');
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </button>
+          </div>
+          <div className="icon-nav-bottom">
+            <div className="nav-av-sm">SM</div>
+          </div>
+        </nav>
+
+        {/* Col 2: Supplier Queue Manifests */}
+        <aside className="sq" aria-label="Supplier Queue Manifests">
+          <div className="sq-head">
+            <div className="sq-head-l">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="1" y="3" width="15" height="13"/>
+                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+                <circle cx="5.5" cy="18.5" r="2.5"/>
+                <circle cx="18.5" cy="18.5" r="2.5"/>
+              </svg>
+              <h2 className="sq-title">
+                Supplier Queue Manifests <span className="sq-badge-count">(4)</span>
+              </h2>
+            </div>
+            <button
+              className="sq-collapse"
+              title={queueCollapsed ? 'Expand queue' : 'Collapse queue'}
+              onClick={() => setQueueCollapsed((prev) => !prev)}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                style={{ transform: queueCollapsed ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}
+              >
+                <path d="m18 15-6-6-6 6"/>
+              </svg>
+            </button>
+          </div>
+
+          {!queueCollapsed && (
+            <div className="sq-cards">
+              {INITIAL_SUPPLIERS.map((sup) => {
+                const isActive = selectedSupplierId === sup.id && !showAllSuppliers;
+
+                if (sup.id === 'hf') {
+                  return (
+                    <div
+                      key={sup.id}
+                      className={`sc ${isActive ? 'active' : ''}`}
+                      onClick={() => {
+                        withUnsavedGuard(() => {
+                          setSelectedSupplierId(sup.id);
+                          setShowAllSuppliers(false);
+                          showToast(`Switched matrix to ${sup.name}`);
+                        });
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={isActive}
+                    >
+                      <div className="sc-top">
+                        <div className="sc-av" style={{ background: sup.color }}>
+                          {sup.initials}
+                        </div>
+                        <div className="sc-info">
+                          <span className="sc-name">{sup.name}</span>
+                          <span className="sc-cat">{sup.category}</span>
+                        </div>
+                        {sup.badge && (
+                          <span className="sc-badge preferred">{sup.badge}</span>
+                        )}
+                        <div className="sc-chev">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="9 18 15 12 9 6"/>
+                          </svg>
+                        </div>
+                      </div>
+
+                      <div className="sc-bar">
+                        <div className="sc-bar-fill green" style={{ width: '100%' }}></div>
+                      </div>
+
+                      <div className="sc-amount ok">
+                        ₹14,250 <span className="sc-min">/ ₹10,000 (MOQ Met)</span>
+                      </div>
+
+                      <div className="sc-meta">
+                        <span className="sc-meta-item">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                          </svg>
+                          3 items Pending
+                        </span>
+                        <span className="sc-meta-item">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                          </svg>
+                          Lead Time: 2d
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (sup.id === 'bi') {
+                  return (
+                    <div
+                      key={sup.id}
+                      className={`sc ${isActive ? 'active' : ''}`}
+                      onClick={() => {
+                        withUnsavedGuard(() => {
+                          setSelectedSupplierId(sup.id);
+                          setShowAllSuppliers(false);
+                          showToast(`Switched matrix to ${sup.name}`);
+                        });
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={isActive}
+                    >
+                      <div className="sc-top">
+                        <div className="sc-av" style={{ background: '#dc2626' }}>
+                          BI
+                        </div>
+                        <div className="sc-info">
+                          <span className="sc-name">{sup.name}</span>
+                          <span className="sc-cat">{sup.category}</span>
+                        </div>
+                        <div className="sc-chev">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="9 18 15 12 9 6"/>
+                          </svg>
+                        </div>
+                      </div>
+
+                      <div className="sc-bar">
+                        <div className="sc-bar-fill orange" style={{ width: '52.5%' }}></div>
+                      </div>
+
+                      <div className="sc-amount warn">
+                        ₹4,200 <span className="sc-min">/ ₹8,000 (Below MOQ)</span>
+                      </div>
+
+                      <div className="sc-meta">
+                        <span className="sc-meta-item" style={{ color: '#d97706' }}>
+                          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#d97706' }}></span>
+                          5 Items Pending
+                        </span>
+                        <span className="sc-meta-item">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                          </svg>
+                          Lead Time: 4d
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={sup.id}
+                    className={`sc ${isActive ? 'active' : ''}`}
+                    onClick={() => {
+                      withUnsavedGuard(() => {
+                        setSelectedSupplierId(sup.id);
+                        setShowAllSuppliers(false);
+                        showToast(`Switched matrix to ${sup.name}`);
+                      });
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-pressed={isActive}
+                  >
+                    <div className="sc-top">
+                      <div className="sc-av" style={{ background: '#16a34a' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
+                          <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+                        </svg>
+                      </div>
+                      <div className="sc-info">
+                        <span className="sc-name">{sup.name}</span>
+                        <span className="sc-cat">{sup.category}</span>
+                      </div>
+                      <span className="sc-badge healthy">Healthy</span>
+                      <div className="sc-chev">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                      </div>
+                    </div>
+
+                    <div className="sc-bar">
+                      <div className="sc-bar-fill green" style={{ width: '100%' }}></div>
+                    </div>
+
+                    <div className="sc-healthy-msg">
+                      All <strong>Healthy</strong> (0 reorders)
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Quick Actions */}
+          <div className="sq-qa">
+            <div className="sq-qa-title">Quick Actions</div>
+            <button className="sq-qa-btn" onClick={() => withUnsavedGuard(() => setCreatePoModalOpen(true))}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
+                <line x1="12" y1="18" x2="12" y2="12"/>
+                <line x1="9" y1="15" x2="15" y2="15"/>
               </svg>
-              <span>
-                Supplier Review Summary ({selectedItems.length}) • {formatCurrency(totalSelectedAmount)}
-              </span>
+              <span>Create PO</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+            <button className="sq-qa-btn" onClick={() => withUnsavedGuard(() => setManifestsModalOpen(true))}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="8" y1="6" x2="21" y2="6"/>
+                <line x1="8" y1="12" x2="21" y2="12"/>
+                <line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/>
+                <line x1="3" y1="12" x2="3.01" y2="12"/>
+                <line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+              <span>View pending manifests</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
             </button>
           </div>
-        </div>
+        </aside>
 
-        {/* Filter Bar */}
-        <div className="filter-bar">
-          <div className="filter-left">
-            {/* Supplier Filter */}
-            <div className="filter-label">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+        {/* Col 3: Replenishment Matrix (Dense Data Table) */}
+        <main className="matrix" aria-label="Replenishment Matrix">
+          <div className="matrix-head">
+            <h1 className="matrix-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <line x1="3" y1="9" x2="21" y2="9"/>
+                <line x1="3" y1="15" x2="21" y2="15"/>
+                <line x1="9" y1="3" x2="9" y2="21"/>
+                <line x1="15" y1="3" x2="15" y2="21"/>
               </svg>
-              <span>Supplier:</span>
-              <select
-                className="filter-select"
-                value={supplierFilter}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  withUnsavedGuard(() => {
-                    setSupplierFilter(val);
-                    showToast(val === 'all' ? 'Showing all suppliers' : `Filtered to ${INITIAL_SUPPLIERS.find(s => s.id === val)?.name}`);
-                  });
-                }}
-                aria-label="Filter by supplier"
-              >
-                <option value="all">All Suppliers ({INITIAL_SUPPLIERS.length})</option>
-                {INITIAL_SUPPLIERS.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.category})
-                  </option>
-                ))}
-              </select>
-            </div>
+              Replenishment Matrix
+            </h1>
+          </div>
 
-            {/* Status Filter */}
-            <div className="status-pills" role="radiogroup" aria-label="Status filter">
-              {[
-                { id: 'all', label: 'All', count: enrichedProducts.length },
-                { id: 'critical', label: 'Critical', count: enrichedProducts.filter((p) => p.priority === 'critical').length },
-                { id: 'low', label: 'Low', count: enrichedProducts.filter((p) => p.priority === 'low').length },
-                { id: 'healthy', label: 'Healthy', count: enrichedProducts.filter((p) => p.priority === 'healthy').length },
-              ].map((st) => (
+          {/* Filter Bar with Supplier & Status Filters */}
+          <div className="filter-bar">
+            <div className="filter-left">
+              <span className="filter-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                </svg>
+              </span>
+              <div className="filter-chip">
+                <span>{showAllSuppliers ? 'All Suppliers' : `Supplier: ${currentSupplier.name}`}</span>
                 <button
-                  key={st.id}
-                  className={`status-pill-btn ${statusFilter === st.id ? 'active' : ''}`}
+                  className="chip-rm"
                   onClick={() => {
                     withUnsavedGuard(() => {
-                      setStatusFilter(st.id);
-                      showToast(`Filter: ${st.label}`);
+                      setShowAllSuppliers((prev) => !prev);
+                      showToast(showAllSuppliers ? `Filtered to ${currentSupplier.name}` : 'Showing items across all suppliers.');
                     });
                   }}
-                  role="radio"
-                  aria-checked={statusFilter === st.id}
+                  title={showAllSuppliers ? 'Filter to single supplier' : 'View all suppliers'}
                 >
-                  <span>{st.label}</span>
-                  <span style={{ opacity: 0.7, fontSize: 10 }}>({st.count})</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Sort Selector */}
-          <div className="filter-right">
-            <label htmlFor="sort-select" style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>
-              Sort:
-            </label>
-            <select
-              id="sort-select"
-              className="sort-sel"
-              value={sortBy}
-              onChange={(e) => {
-                const val = e.target.value;
-                withUnsavedGuard(() => {
-                  setSortBy(val);
-                  showToast(`Sorted table by ${val}`);
-                });
-              }}
-            >
-              <option value="priority">Priority (Critical First)</option>
-              <option value="stock_low">Current Stock (Low to High)</option>
-              <option value="safety_target">Safety Target (High to Low)</option>
-              <option value="order_qty">Order Quantity (High to Low)</option>
-              <option value="subtotal">Subtotal (High to Low)</option>
-              <option value="name">Item Name (A–Z)</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Toolbar */}
-        <div className="toolbar">
-          <div style={{ position: 'relative' }}>
-            <button
-              className="toolbar-sel"
-              onClick={() => setBatchMenuOpen((prev) => !prev)}
-              title="Selection options (Space to toggle, Enter/F2 to edit)"
-              aria-haspopup="true"
-              aria-expanded={batchMenuOpen}
-            >
-              <input
-                type="checkbox"
-                className="cb"
-                checked={allSelected}
-                ref={(el) => {
-                  if (el) el.indeterminate = someSelected;
-                }}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  handleToggleSelectAll();
-                }}
-                aria-label="Select all items in view"
-              />
-              <span>{tableSelectedItems.length} Items Selected</span>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="m6 9 6 6 6-6"/>
-              </svg>
-            </button>
-
-            {batchMenuOpen && (
-              <div className="dropdown-menu">
-                <button className="dropdown-item" onClick={() => handleSelectPreset('all')}>
-                  Select All ({sortedProducts.length})
-                </button>
-                <button className="dropdown-item" onClick={() => handleSelectPreset('critical')}>
-                  Select Critical ({criticalItems.length})
-                </button>
-                <button className="dropdown-item" onClick={() => handleSelectPreset('low')}>
-                  Select Low Stock ({lowItems.length})
-                </button>
-                <button className="dropdown-item" onClick={() => handleSelectPreset('below_safety')}>
-                  Select Below Safety Target
-                </button>
-                <button className="dropdown-item" onClick={() => handleSelectPreset('invert')}>
-                  Invert Selection
-                </button>
-                <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
-                <button className="dropdown-item" onClick={() => handleSelectPreset('none')}>
-                  Deselect All
-                </button>
-              </div>
-            )}
-          </div>
-
-          <button
-            className="btn-secondary"
-            onClick={handleApplySupplierMinimums}
-            title="Automatically adjust order quantities to meet supplier thresholds"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-            <span>Apply Supplier Minimums</span>
-          </button>
-
-          <button
-            className="btn-secondary"
-            onClick={handleSaveDraft}
-            title="Save replenishment draft (Ctrl+S)"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-              <polyline points="17 21 17 13 7 13 7 21"/>
-              <polyline points="7 3 7 8 15 8"/>
-            </svg>
-            <span>Save Draft</span>
-          </button>
-
-          {/* Windows Keyboard Shortcuts Affordance */}
-          <div className="toolbar-kbd-hint">
-            <span>Keyboard:</span>
-            <kbd>Ctrl+K</kbd> Search • <kbd>↑↓</kbd> Rows • <kbd>Space</kbd> Select • <kbd>F2/Enter</kbd> Edit • <kbd>Esc</kbd> Cancel • <kbd>Ctrl+S</kbd> Save
-          </div>
-        </div>
-
-        {/* ─── Dense Data Table Views ────────────────────────────────────── */}
-        {appState === 'loading' && (
-          <div className="tbl-wrap">
-            <div className="skel-rows">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((idx) => (
-                <div key={idx} className="skel-row">
-                  <div className="skel-cell skel-sm"></div>
-                  <div className="skel-cell skel-md"></div>
-                  <div className="skel-cell skel-lg"></div>
-                  <div className="skel-cell skel-md"></div>
-                  <div className="skel-cell skel-sm"></div>
-                  <div className="skel-cell skel-sm"></div>
-                  <div className="skel-cell skel-md"></div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {appState === 'empty' && (
-          <div className="state-box">
-            <div className="state-icon">📦</div>
-            <div className="state-title">No Replenishment Items Found</div>
-            <div className="state-body">
-              All categories and SKUs are currently at optimal inventory levels or no products match the current filters.
-            </div>
-            <button
-              className="retry-btn"
-              onClick={() => {
-                setSupplierFilter('all');
-                setStatusFilter('all');
-                setSearchTerm('');
-                setAppState('default');
-              }}
-            >
-              Reset Filters
-            </button>
-          </div>
-        )}
-
-        {appState === 'error' && (
-          <div className="state-box">
-            <div className="state-icon" style={{ color: 'var(--c-critical)' }}>⚠️</div>
-            <div className="state-title">Failed to Synchronize Inventory Feed</div>
-            <div className="state-body">
-              Could not retrieve live inventory levels from store master ERP gateway. Check connection and retry.
-            </div>
-            <button
-              className="retry-btn"
-              onClick={() => {
-                setAppState('loading');
-                setTimeout(() => setAppState('default'), 700);
-              }}
-            >
-              Retry Synchronization
-            </button>
-          </div>
-        )}
-
-        {appState === 'default' && (
-          <div
-            ref={tableWrapRef}
-            className="tbl-wrap"
-            tabIndex={0}
-            onKeyDown={handleTableKeyDown}
-            role="region"
-            aria-label="Dense Replenishment Matrix"
-          >
-            <table className="tbl" role="grid" aria-label="Replenishment Matrix Table">
-              <thead>
-                <tr role="row">
-                  <th className="col-chk" role="columnheader">
-                    <input
-                      type="checkbox"
-                      className="cb"
-                      checked={allSelected}
-                      ref={(el) => {
-                        if (el) el.indeterminate = someSelected;
-                      }}
-                      onChange={handleToggleSelectAll}
-                      aria-label="Select all items"
-                    />
-                  </th>
-                  <th className="col-sku" role="columnheader">SKU</th>
-                  <th className="col-name" role="columnheader">Item Name &amp; Category</th>
-                  <th className="col-sup" role="columnheader">Supplier</th>
-                  <th className="col-stk" role="columnheader">Current Stock</th>
-                  <th className="col-tgt" role="columnheader">Safety Target</th>
-                  <th className="col-st" role="columnheader">Status</th>
-                  <th className="col-qty" role="columnheader">Order Qty</th>
-                  <th className="col-cost" role="columnheader">Unit Cost</th>
-                  <th className="col-sub" role="columnheader">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedProducts.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)' }}>
-                      No items match the selected filter criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  <>
-                    {/* CRITICAL PRIORITY GROUP */}
-                    {criticalItems.length > 0 && (
-                      <>
-                        <tr className="pg-hdr" role="row">
-                          <td
-                            colSpan={10}
-                            style={{ background: 'var(--c-critical-bg)' }}
-                            onClick={() => toggleGroupCollapse('critical')}
-                          >
-                            <div className="pg-wrap">
-                              <span className="pg-dot dot-c">●</span>
-                              <span className="lbl-c">CRITICAL REORDER REQUIREMENT</span>
-                              <span className="pg-cnt">({criticalItems.length} items)</span>
-                              <span className={`pg-chev ${collapsedGroups.critical ? 'collapsed' : ''}`}>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <polyline points="6 9 12 15 18 9"/>
-                                </svg>
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                        {!collapsedGroups.critical &&
-                          criticalItems.map((prod) => renderProductRow(prod))}
-                      </>
-                    )}
-
-                    {/* LOW STOCK PRIORITY GROUP */}
-                    {lowItems.length > 0 && (
-                      <>
-                        <tr className="pg-hdr" role="row">
-                          <td
-                            colSpan={10}
-                            style={{ background: 'var(--c-low-bg)' }}
-                            onClick={() => toggleGroupCollapse('low')}
-                          >
-                            <div className="pg-wrap">
-                              <span className="pg-dot dot-l">●</span>
-                              <span className="lbl-l">LOW STOCK WARNING</span>
-                              <span className="pg-cnt">({lowItems.length} items)</span>
-                              <span className={`pg-chev ${collapsedGroups.low ? 'collapsed' : ''}`}>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <polyline points="6 9 12 15 18 9"/>
-                                </svg>
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                        {!collapsedGroups.low &&
-                          lowItems.map((prod) => renderProductRow(prod))}
-                      </>
-                    )}
-
-                    {/* HEALTHY PRIORITY GROUP */}
-                    {healthyItems.length > 0 && (
-                      <>
-                        <tr className="pg-hdr" role="row">
-                          <td
-                            colSpan={10}
-                            style={{ background: 'var(--c-healthy-bg)' }}
-                            onClick={() => toggleGroupCollapse('healthy')}
-                          >
-                            <div className="pg-wrap">
-                              <span className="pg-dot dot-h">●</span>
-                              <span className="lbl-h">HEALTHY INVENTORY</span>
-                              <span className="pg-cnt">({healthyItems.length} items)</span>
-                              <span className={`pg-chev ${collapsedGroups.healthy ? 'collapsed' : ''}`}>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <polyline points="6 9 12 15 18 9"/>
-                                </svg>
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                        {!collapsedGroups.healthy &&
-                          healthyItems.map((prod) => renderProductRow(prod))}
-                      </>
-                    )}
-                  </>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Pagination Bar */}
-        <div className="pager">
-          <span className="pager-info">
-            Showing 1–{filteredProducts.length} of {filteredProducts.length} items ({selectedItems.length} selected)
-          </span>
-          <div className="pager-ctrl">
-            <button className="pager-btn" disabled title="Previous page">‹</button>
-            <button className="pager-btn cur">1</button>
-            <button className="pager-btn" disabled title="Next page">›</button>
-          </div>
-        </div>
-      </main>
-
-      {/* ─── Supplier Review Summary Panel (Slide-over Drawer) ─────────────── */}
-      {summaryDrawerOpen && (
-        <div className="drawer-backdrop" onClick={() => setSummaryDrawerOpen(false)}>
-          <aside
-            className="summary-drawer"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-label="Supplier Review Summary &amp; PO Draft"
-          >
-            {/* Drawer Header */}
-            <div className="drawer-head">
-              <div className="drawer-title-wrap">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                  <line x1="16" y1="13" x2="8" y2="13"/>
-                  <line x1="16" y1="17" x2="8" y2="17"/>
-                </svg>
-                <h2 className="drawer-title">Supplier Review Summary</h2>
-              </div>
-              <div className="drawer-actions">
-                <button className="drawer-icon-btn" onClick={handleExportCSV} title="Export CSV">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
                   </svg>
                 </button>
-                <button className="drawer-icon-btn" onClick={handlePrintManifest} title="Print Manifest">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="6 9 6 2 18 2 18 9"/>
-                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-                    <rect x="6" y="14" width="12" height="8"/>
-                  </svg>
-                </button>
-                <button className="drawer-icon-btn" onClick={handleCopySummary} title="Copy Summary">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                  </svg>
-                </button>
-                <button
-                  className="drawer-icon-btn"
-                  onClick={() => setSummaryDrawerOpen(false)}
-                  title="Close summary panel"
-                >
-                  ✕
-                </button>
               </div>
-            </div>
 
-            {/* Supplier Tabs if multiple suppliers in draft */}
-            {draftsBySupplier.length > 1 && (
-              <div className="drawer-sup-tabs">
-                {draftsBySupplier.map((g) => (
+              {/* Status Filter Pills */}
+              <div className="status-pills" role="radiogroup" aria-label="Status filter">
+                {['all', 'critical', 'low', 'healthy'].map((st) => (
                   <button
-                    key={g.supplier.id}
-                    className={`drawer-sup-tab ${activeSummarySupplierId === g.supplier.id ? 'active' : ''}`}
-                    onClick={() => setActiveSummarySupplierId(g.supplier.id)}
+                    key={st}
+                    className={`status-pill-btn ${statusFilter === st ? 'active' : ''}`}
+                    onClick={() => {
+                      withUnsavedGuard(() => {
+                        setStatusFilter(st);
+                        showToast(`Filtered status: ${st.toUpperCase()}`);
+                      });
+                    }}
+                    role="radio"
+                    aria-checked={statusFilter === st}
                   >
-                    {g.supplier.name} ({g.items.length})
+                    {st.charAt(0).toUpperCase() + st.slice(1)}
                   </button>
                 ))}
               </div>
-            )}
+            </div>
 
-            {/* Drawer Body */}
-            <div className="drawer-content">
-              {draftsBySupplier.length === 0 ? (
-                <div className="state-box">
-                  <div className="state-icon">📋</div>
-                  <div className="state-title">No Items In Draft</div>
-                  <div className="state-body">
-                    Check row checkboxes in the full width table to build purchase order drafts.
-                  </div>
+            <div className="filter-right">
+              <label htmlFor="sort-select" className="sr-only">Sort matrix</label>
+              <span style={{ fontSize: 12, color: 'var(--text3)', marginRight: 6 }}>Sort:</span>
+              <select
+                id="sort-select"
+                className="sort-sel"
+                value={sortBy}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  withUnsavedGuard(() => {
+                    setSortBy(val);
+                    showToast(`Sorted table by ${val}`);
+                  });
+                }}
+              >
+                <option value="priority">Priority (Critical First)</option>
+                <option value="stock_low">Current Stock (Low to High)</option>
+                <option value="safety_target">Safety Target (High to Low)</option>
+                <option value="order_qty">Order Quantity (High to Low)</option>
+                <option value="subtotal">Subtotal (High to Low)</option>
+                <option value="name">Item Name (A–Z)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Toolbar */}
+          <div className="toolbar">
+            <div style={{ position: 'relative' }}>
+              <button
+                className="toolbar-sel"
+                onClick={() => setBatchMenuOpen((prev) => !prev)}
+                title="Selection options (Space to toggle, Enter to edit)"
+                aria-haspopup="true"
+                aria-expanded={batchMenuOpen}
+              >
+                <input
+                  type="checkbox"
+                  className="cb"
+                  checked={allSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someSelected;
+                  }}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    handleToggleSelectAll();
+                  }}
+                />
+                <span>{selectedItems.length} Items Selected</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
+              </button>
+
+              {batchMenuOpen && (
+                <div className="dropdown-menu">
+                  <button className="dropdown-item" onClick={() => handleSelectPreset('all')}>
+                    Select All ({supplierProducts.length})
+                  </button>
+                  <button className="dropdown-item" onClick={() => handleSelectPreset('critical')}>
+                    Select Critical Only ({supplierProducts.filter((p) => p.priority === 'critical').length})
+                  </button>
+                  <button className="dropdown-item" onClick={() => handleSelectPreset('low')}>
+                    Select Low Stock ({supplierProducts.filter((p) => p.priority === 'low').length})
+                  </button>
+                  <button className="dropdown-item" onClick={() => handleSelectPreset('below_safety')}>
+                    Select Below Safety Target
+                  </button>
+                  <button className="dropdown-item" onClick={() => handleSelectPreset('invert')}>
+                    Invert Selection
+                  </button>
+                  <div className="dropdown-divider"></div>
+                  <button className="dropdown-item danger" onClick={() => handleSelectPreset('none')}>
+                    Deselect All
+                  </button>
                 </div>
-              ) : (
-                <>
-                  {activeSummaryGroup && (
-                    <>
-                      {/* Supplier Information Section */}
-                      <div className="drawer-sec">
-                        <div className="drawer-sec-title">Supplier Information</div>
-                        <div className="sup-card">
-                          <div className="sup-card-av" style={{ background: activeSummaryGroup.supplier.color }}>
-                            {activeSummaryGroup.supplier.initials}
-                          </div>
-                          <div>
-                            <div className="sup-card-name">{activeSummaryGroup.supplier.name}</div>
-                            <div className="sup-card-meta">
-                              {activeSummaryGroup.supplier.category} • Lead Time: {activeSummaryGroup.supplier.leadTime}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Minimum Threshold Checklist */}
-                      <div className="drawer-sec">
-                        <div className="drawer-sec-title">Minimum Threshold Checklist</div>
-                        <div className="checklist">
-                          <div className="check-item">
-                            <span className={`check-icon ${activeSummaryGroup.moqMet ? 'pass' : 'fail'}`}>
-                              {activeSummaryGroup.moqMet ? '✔' : '✖'}
-                            </span>
-                            <span>
-                              Order value {formatCurrency(activeSummaryGroup.totalAmount)}{' '}
-                              {activeSummaryGroup.moqMet ? 'exceeds' : 'below'}{' '}
-                              {formatCurrency(activeSummaryGroup.supplier.targetMoq)} MOQ threshold
-                            </span>
-                          </div>
-                          <div className="check-item">
-                            <span className={`check-icon ${activeSummaryGroup.unitsMet ? 'pass' : 'fail'}`}>
-                              {activeSummaryGroup.unitsMet ? '✔' : '✖'}
-                            </span>
-                            <span>
-                              Order units ({activeSummaryGroup.totalUnits} units){' '}
-                              {activeSummaryGroup.unitsMet ? 'exceeds' : 'below'}{' '}
-                              {activeSummaryGroup.supplier.unitThreshold} unit freight threshold
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Financial Summary */}
-                      <div className="drawer-sec">
-                        <div className="drawer-sec-title">Financial Summary ({activeSummaryGroup.supplier.name})</div>
-                        <div className="fin-summary">
-                          <div className="fin-row">
-                            <span className="lbl">Subtotal ({activeSummaryGroup.items.length} SKUs)</span>
-                            <span className="val">{formatCurrency(activeSummaryGroup.totalAmount)}</span>
-                          </div>
-                          <div className="fin-row">
-                            <span className="lbl">Total Units</span>
-                            <span className="val">{activeSummaryGroup.totalUnits} units</span>
-                          </div>
-                          <div className="fin-row">
-                            <span className="lbl">GST / Taxes</span>
-                            <span className="val" style={{ color: 'var(--text3)', fontWeight: 400 }}>Included</span>
-                          </div>
-                          <div className="fin-row total">
-                            <span className="lbl">Total PO Amount</span>
-                            <span className="val">{formatCurrency(activeSummaryGroup.totalAmount)}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Order Breakdown */}
-                      <div className="drawer-sec" style={{ flex: 1 }}>
-                        <div className="drawer-sec-title">Order Breakdown ({activeSummaryGroup.items.length} Items)</div>
-                        <div className="bk-list">
-                          {activeSummaryGroup.items.map((item) => (
-                            <div key={item.id} className="bk-row">
-                              <div className="bk-left">
-                                <span className="bk-item-name" title={item.name}>{item.name}</span>
-                                <span className="bk-item-sku">{item.sku} • @ {formatCurrency(item.unitCost)}</span>
-                              </div>
-                              <div className="bk-right">
-                                <span className="bk-item-units">{item.orderQty} units</span>
-                                <span className="bk-item-subtotal">{formatCurrency(item.orderQty * item.unitCost)}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </>
               )}
             </div>
 
-            {/* Drawer Actions */}
-            {draftsBySupplier.length > 0 && (
-              <div className="drawer-footer">
-                <button
-                  className="btn-drawer-approve"
-                  onClick={handleSubmitPO}
-                  disabled={selectedItems.length === 0}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="m22 2-7 20-4-9-9-4Z"/>
-                    <path d="M22 2 11 13"/>
-                  </svg>
-                  <span>Approve &amp; Transmit PO ({formatCurrency(totalSelectedAmount)}) →</span>
-                </button>
-                <button className="btn-drawer-save" onClick={handleSaveDraft}>
-                  Save Draft (Ctrl+S)
-                </button>
-                <button className="btn-drawer-discard" onClick={handleDiscardAll}>
-                  Discard All Selections &amp; Baseline
-                </button>
+            <button
+              className="btn-primary"
+              onClick={handleApproveBatch}
+              disabled={selectedItems.length === 0}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="m22 2-7 20-4-9-9-4Z"/>
+                <path d="M22 2 11 13"/>
+              </svg>
+              <span>Approve Batch</span>
+            </button>
+
+            <button
+              className="btn-secondary"
+              onClick={handleApplySupplierMinimums}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+              <span>Apply Supplier Minimums</span>
+            </button>
+
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text3)' }}>
+              Keyboard: <kbd style={{ padding: '1px 4px', border: '1px solid var(--border)', borderRadius: 3 }}>↑↓</kbd> Rows • <kbd style={{ padding: '1px 4px', border: '1px solid var(--border)', borderRadius: 3 }}>Space</kbd> Select • <kbd style={{ padding: '1px 4px', border: '1px solid var(--border)', borderRadius: 3 }}>Enter</kbd> Edit
+            </span>
+          </div>
+
+          {/* Conditional Views: Loading, Empty, Error, or Dense Data Table */}
+          {appState === 'loading' && (
+            <div className="tbl-wrap">
+              <div className="skel-rows">
+                {[1, 2, 3, 4, 5, 6].map((idx) => (
+                  <div key={idx} className="skel-row">
+                    <div className="skel-cell skel-sm"></div>
+                    <div className="skel-cell skel-md"></div>
+                    <div className="skel-cell skel-lg"></div>
+                    <div className="skel-cell skel-sm"></div>
+                    <div className="skel-cell skel-sm"></div>
+                    <div className="skel-cell skel-md"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {appState === 'empty' && (
+            <div className="state-box">
+              <div className="state-icon">📦</div>
+              <h3 className="state-title">No Replenishment Required</h3>
+              <p className="state-body">
+                All inventory across {currentSupplier.name} categories is at or above safety targets.
+              </p>
+              <button
+                className="retry-btn"
+                onClick={() => setAppState('default')}
+              >
+                Reset to Default View
+              </button>
+            </div>
+          )}
+
+          {appState === 'error' && (
+            <div className="state-box">
+              <div className="state-icon" style={{ color: 'var(--c-critical)' }}>⚠️</div>
+              <h3 className="state-title">Unable to Load Replenishment Data</h3>
+              <p className="state-body">
+                Connection to JSON data store timed out. Check network or server configuration.
+              </p>
+              <button
+                className="retry-btn"
+                onClick={() => {
+                  setAppState('loading');
+                  setTimeout(() => setAppState('default'), 600);
+                }}
+              >
+                Retry Connection
+              </button>
+            </div>
+          )}
+
+          {appState === 'default' && (
+            <div
+              className="tbl-wrap"
+              ref={tableRef}
+              tabIndex={0}
+              onKeyDown={handleTableKeyDown}
+              role="region"
+              aria-label="Product Replenishment Grid with Keyboard Navigation"
+            >
+              <table className="tbl" role="grid" aria-label="Replenishment products table">
+                <thead>
+                  <tr role="row">
+                    <th className="col-chk" role="columnheader">
+                      <input
+                        type="checkbox"
+                        className="cb"
+                        checked={allSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = someSelected;
+                        }}
+                        onChange={handleToggleSelectAll}
+                        aria-label="Select all products"
+                      />
+                    </th>
+                    <th className="col-sku" role="columnheader">SKU</th>
+                    <th className="col-name" role="columnheader">Item Name</th>
+                    <th className="col-stk num" role="columnheader">Current<br />Stock</th>
+                    <th className="col-tgt num" role="columnheader">Safety<br />Target</th>
+                    <th className="col-st" role="columnheader">Status</th>
+                    <th className="col-qty" role="columnheader">Order Qty</th>
+                    <th className="col-sub num" role="columnheader">Subtotal (₹)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* CRITICAL GROUP */}
+                  {criticalItems.length > 0 && (
+                    <>
+                      <tr className="pg-row" role="row">
+                        <td colSpan={8} role="gridcell">
+                          <div
+                            className="pg-hdr"
+                            style={{ background: 'var(--c-critical-bg)' }}
+                            onClick={() => toggleGroupCollapse('critical')}
+                          >
+                            <span className="pg-dot dot-c">●</span>
+                            <span className="lbl-c">CRITICAL</span>
+                            <span className="pg-cnt">({criticalItems.length})</span>
+                            <span className={`pg-chev ${collapsedGroups.critical ? 'collapsed' : ''}`}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <polyline points="6 9 12 15 18 9"/>
+                              </svg>
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      {!collapsedGroups.critical && criticalItems.map((prod) => {
+                        const lineSubtotal = prod.orderQty * prod.unitCost;
+                        const isEditingThis = editingSku === prod.sku;
+                        const isKbFocused = focusedRowIndex !== null && sortedProducts[focusedRowIndex]?.id === prod.id;
+
+                        return (
+                          <tr
+                            key={prod.id}
+                            className={`pr ${prod.selected ? 'sel' : ''} ${isKbFocused ? 'kb-focused' : ''}`}
+                            role="row"
+                            aria-selected={prod.selected}
+                            tabIndex={-1}
+                            onClick={() => setFocusedRowIndex(sortedProducts.findIndex((p) => p.id === prod.id))}
+                          >
+                            <td className="col-chk" role="gridcell">
+                              <input
+                                type="checkbox"
+                                className="cb"
+                                checked={prod.selected}
+                                onChange={() => handleToggleSelect(prod.id)}
+                                aria-label={`Select ${prod.name}`}
+                              />
+                            </td>
+                            <td className="col-sku" role="gridcell">
+                              <span className="sku-lbl">{prod.sku}</span>
+                            </td>
+                            <td className="col-name" role="gridcell">
+                              <div className="prod-name">{prod.name}</div>
+                              <div className="prod-cat">{prod.category}</div>
+                            </td>
+                            <td className="col-stk" role="gridcell">{prod.currentStock}</td>
+                            <td className="col-tgt" role="gridcell">{prod.safetyTarget}</td>
+                            <td className="col-st" role="gridcell">
+                              <span className="st-badge critical">
+                                <span className="st-dot"></span>
+                                Critical
+                              </span>
+                            </td>
+                            <td className="col-qty" role="gridcell">
+                              {isEditingThis ? (
+                                <div className="qty-wrap">
+                                  <input
+                                    type="number"
+                                    className="qty-inp"
+                                    value={editQtyValue}
+                                    onChange={(e) => {
+                                      setEditQtyValue(e.target.value);
+                                      setIsUnsaved(true);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveInlineQty(prod.sku);
+                                      if (e.key === 'Escape') {
+                                        if (isUnsaved) {
+                                          withUnsavedGuard(() => handleCancelInlineQty());
+                                        } else {
+                                          handleCancelInlineQty();
+                                        }
+                                      }
+                                    }}
+                                    autoFocus
+                                    aria-label="Order Quantity"
+                                  />
+                                  <div className="qty-actions">
+                                    {isUnsaved && <span className="qty-unsaved">Unsaved</span>}
+                                    <button
+                                      className="qty-save"
+                                      onClick={() => handleSaveInlineQty(prod.sku)}
+                                    >
+                                      ↵ Save
+                                    </button>
+                                    <span className="qty-sep">|</span>
+                                    <button
+                                      className="qty-cancel"
+                                      onClick={() => {
+                                        if (isUnsaved) {
+                                          withUnsavedGuard(() => handleCancelInlineQty());
+                                        } else {
+                                          handleCancelInlineQty();
+                                        }
+                                      }}
+                                    >
+                                      Esc Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  className={`qty-disp ${prod.orderQty === 0 ? 'qty-zero' : ''}`}
+                                  onClick={() => withUnsavedGuard(() => handleStartEdit(prod))}
+                                  title="Click to edit quantity (or press Enter)"
+                                >
+                                  {prod.orderQty}
+                                </button>
+                              )}
+                            </td>
+                            <td className="col-sub" role="gridcell">
+                              {formatCurrency(lineSubtotal)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </>
+                  )}
+
+                  {/* LOW GROUP */}
+                  {lowItems.length > 0 && (
+                    <>
+                      <tr className="pg-row" role="row">
+                        <td colSpan={8} role="gridcell">
+                          <div
+                            className="pg-hdr"
+                            style={{ background: 'var(--c-low-bg)' }}
+                            onClick={() => toggleGroupCollapse('low')}
+                          >
+                            <span className="pg-dot dot-l">●</span>
+                            <span className="lbl-l">LOW</span>
+                            <span className="pg-cnt">({lowItems.length})</span>
+                            <span className={`pg-chev ${collapsedGroups.low ? 'collapsed' : ''}`}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <polyline points="6 9 12 15 18 9"/>
+                              </svg>
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      {!collapsedGroups.low && lowItems.map((prod) => {
+                        const lineSubtotal = prod.orderQty * prod.unitCost;
+                        const isEditingThis = editingSku === prod.sku;
+                        const isKbFocused = focusedRowIndex !== null && sortedProducts[focusedRowIndex]?.id === prod.id;
+
+                        return (
+                          <tr
+                            key={prod.id}
+                            className={`pr ${prod.selected ? 'sel' : ''} ${isKbFocused ? 'kb-focused' : ''}`}
+                            role="row"
+                            aria-selected={prod.selected}
+                            tabIndex={-1}
+                            onClick={() => setFocusedRowIndex(sortedProducts.findIndex((p) => p.id === prod.id))}
+                          >
+                            <td className="col-chk" role="gridcell">
+                              <input
+                                type="checkbox"
+                                className="cb"
+                                checked={prod.selected}
+                                onChange={() => handleToggleSelect(prod.id)}
+                                aria-label={`Select ${prod.name}`}
+                              />
+                            </td>
+                            <td className="col-sku" role="gridcell">
+                              <span className="sku-lbl">{prod.sku}</span>
+                            </td>
+                            <td className="col-name" role="gridcell">
+                              <div className="prod-name">{prod.name}</div>
+                              <div className="prod-cat">{prod.category}</div>
+                            </td>
+                            <td className="col-stk" role="gridcell">{prod.currentStock}</td>
+                            <td className="col-tgt" role="gridcell">{prod.safetyTarget}</td>
+                            <td className="col-st" role="gridcell">
+                              <span className="st-badge low">
+                                <span className="st-dot"></span>
+                                Low
+                              </span>
+                            </td>
+                            <td className="col-qty" role="gridcell">
+                              {isEditingThis ? (
+                                <div className="qty-wrap">
+                                  <input
+                                    type="number"
+                                    className="qty-inp"
+                                    value={editQtyValue}
+                                    onChange={(e) => {
+                                      setEditQtyValue(e.target.value);
+                                      setIsUnsaved(true);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveInlineQty(prod.sku);
+                                      if (e.key === 'Escape') {
+                                        if (isUnsaved) {
+                                          withUnsavedGuard(() => handleCancelInlineQty());
+                                        } else {
+                                          handleCancelInlineQty();
+                                        }
+                                      }
+                                    }}
+                                    autoFocus
+                                    aria-label="Order Quantity"
+                                  />
+                                  <div className="qty-actions">
+                                    {isUnsaved && <span className="qty-unsaved">Unsaved</span>}
+                                    <button
+                                      className="qty-save"
+                                      onClick={() => handleSaveInlineQty(prod.sku)}
+                                    >
+                                      ↵ Save
+                                    </button>
+                                    <span className="qty-sep">|</span>
+                                    <button
+                                      className="qty-cancel"
+                                      onClick={() => {
+                                        if (isUnsaved) {
+                                          withUnsavedGuard(() => handleCancelInlineQty());
+                                        } else {
+                                          handleCancelInlineQty();
+                                        }
+                                      }}
+                                    >
+                                      Esc Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  className={`qty-disp ${prod.orderQty === 0 ? 'qty-zero' : ''}`}
+                                  onClick={() => withUnsavedGuard(() => handleStartEdit(prod))}
+                                  title="Click to edit quantity (or press Enter)"
+                                >
+                                  {prod.orderQty}
+                                </button>
+                              )}
+                            </td>
+                            <td className="col-sub" role="gridcell">
+                              {formatCurrency(lineSubtotal)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </>
+                  )}
+
+                  {/* HEALTHY GROUP */}
+                  {healthyItems.length > 0 && (
+                    <>
+                      <tr className="pg-row" role="row">
+                        <td colSpan={8} role="gridcell">
+                          <div
+                            className="pg-hdr"
+                            style={{ background: 'var(--c-healthy-bg)' }}
+                            onClick={() => toggleGroupCollapse('healthy')}
+                          >
+                            <span className="pg-dot dot-h">●</span>
+                            <span className="lbl-h">HEALTHY</span>
+                            <span className="pg-cnt">({healthyItems.length})</span>
+                            <span className={`pg-chev ${collapsedGroups.healthy ? 'collapsed' : ''}`}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <polyline points="6 9 12 15 18 9"/>
+                              </svg>
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      {!collapsedGroups.healthy && healthyItems.map((prod) => {
+                        const lineSubtotal = prod.orderQty * prod.unitCost;
+                        const isEditingThis = editingSku === prod.sku;
+                        const isKbFocused = focusedRowIndex !== null && sortedProducts[focusedRowIndex]?.id === prod.id;
+
+                        return (
+                          <tr
+                            key={prod.id}
+                            className={`pr ${prod.selected ? 'sel' : ''} ${isKbFocused ? 'kb-focused' : ''}`}
+                            role="row"
+                            aria-selected={prod.selected}
+                            tabIndex={-1}
+                            onClick={() => setFocusedRowIndex(sortedProducts.findIndex((p) => p.id === prod.id))}
+                          >
+                            <td className="col-chk" role="gridcell">
+                              <input
+                                type="checkbox"
+                                className="cb"
+                                checked={prod.selected}
+                                onChange={() => handleToggleSelect(prod.id)}
+                                aria-label={`Select ${prod.name}`}
+                              />
+                            </td>
+                            <td className="col-sku" role="gridcell">
+                              <span className="sku-lbl">{prod.sku}</span>
+                            </td>
+                            <td className="col-name" role="gridcell">
+                              <div className="prod-name">{prod.name}</div>
+                              <div className="prod-cat">{prod.category}</div>
+                            </td>
+                            <td className="col-stk" role="gridcell">{prod.currentStock}</td>
+                            <td className="col-tgt" role="gridcell">{prod.safetyTarget}</td>
+                            <td className="col-st" role="gridcell">
+                              <span className="st-badge healthy">
+                                <span className="st-dot"></span>
+                                Healthy
+                              </span>
+                            </td>
+                            <td className="col-qty" role="gridcell">
+                              {isEditingThis ? (
+                                <div className="qty-wrap">
+                                  <input
+                                    type="number"
+                                    className="qty-inp"
+                                    value={editQtyValue}
+                                    onChange={(e) => {
+                                      setEditQtyValue(e.target.value);
+                                      setIsUnsaved(true);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveInlineQty(prod.sku);
+                                      if (e.key === 'Escape') {
+                                        if (isUnsaved) {
+                                          withUnsavedGuard(() => handleCancelInlineQty());
+                                        } else {
+                                          handleCancelInlineQty();
+                                        }
+                                      }
+                                    }}
+                                    autoFocus
+                                    aria-label="Order Quantity"
+                                  />
+                                  <div className="qty-actions">
+                                    {isUnsaved && <span className="qty-unsaved">Unsaved</span>}
+                                    <button
+                                      className="qty-save"
+                                      onClick={() => handleSaveInlineQty(prod.sku)}
+                                    >
+                                      ↵ Save
+                                    </button>
+                                    <span className="qty-sep">|</span>
+                                    <button
+                                      className="qty-cancel"
+                                      onClick={() => {
+                                        if (isUnsaved) {
+                                          withUnsavedGuard(() => handleCancelInlineQty());
+                                        } else {
+                                          handleCancelInlineQty();
+                                        }
+                                      }}
+                                    >
+                                      Esc Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  className={`qty-disp ${prod.orderQty === 0 ? 'qty-zero' : ''}`}
+                                  onClick={() => withUnsavedGuard(() => handleStartEdit(prod))}
+                                  title="Click to edit quantity (or press Enter)"
+                                >
+                                  {prod.orderQty}
+                                </button>
+                              )}
+                            </td>
+                            <td className="col-sub" role="gridcell">
+                              {formatCurrency(lineSubtotal)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Pagination Footer */}
+          <div className="pager">
+            <span className="pager-info">
+              Showing 1–{filteredProducts.length} of {filteredProducts.length} items
+            </span>
+            <div className="pager-ctrl">
+              <button
+                className="pager-btn"
+                disabled
+                title="Previous page"
+                onClick={() => showToast('Already on first page.')}
+              >
+                ‹
+              </button>
+              <button className="pager-btn cur">1</button>
+              <button
+                className="pager-btn"
+                disabled
+                title="Next page"
+                onClick={() => showToast('All items are displayed on page 1.')}
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        </main>
+
+        {/* Col 4: Supplier Review Summary & Purchase Order Draft Panel */}
+        <aside className="po" aria-label="Supplier Review Summary and PO Draft">
+          <div className="po-head">
+            <div className="po-head-l">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+              </svg>
+              <h2 className="po-title">PO Draft #PO-2026-104</h2>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <button
+                className="po-more"
+                title="More options"
+                onClick={() => setPoMoreMenuOpen((prev) => !prev)}
+                aria-haspopup="true"
+                aria-expanded={poMoreMenuOpen}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="1"/>
+                  <circle cx="12" cy="5" r="1"/>
+                  <circle cx="12" cy="19" r="1"/>
+                </svg>
+              </button>
+              {poMoreMenuOpen && (
+                <div className="dropdown-menu right">
+                  <button className="dropdown-item" onClick={handleExportCSV}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Export as CSV
+                  </button>
+                  <button className="dropdown-item" onClick={handlePrintManifest}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="6 9 6 2 18 2 18 9"/>
+                      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                      <rect x="6" y="14" width="12" height="8"/>
+                    </svg>
+                    Print PO Manifest
+                  </button>
+                  <button className="dropdown-item" onClick={handleCopySummary}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                    </svg>
+                    Copy Summary
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section: Supplier Information */}
+          <div className="po-sec">
+            <div className="po-sec-title">Supplier Information</div>
+            <div className="po-sup-row">
+              <div className="po-sup-av" style={{ background: currentSupplier.color }}>
+                {currentSupplier.initials}
+              </div>
+              <div>
+                <div className="po-sup-name">{currentSupplier.name}</div>
+                <div className="po-sup-cat">{currentSupplier.category}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Minimum Threshold Checklist */}
+          <div className="po-sec">
+            <div className="po-sec-title">Minimum Threshold Checklist</div>
+            <div className="po-checklist">
+              <div className="po-check">
+                <span className={`po-check-ic ${totalSelectedAmount >= currentSupplier.targetMoq ? 'pass' : 'fail'}`}>
+                  {totalSelectedAmount >= currentSupplier.targetMoq ? '✔' : '✖'}
+                </span>
+                <span>
+                  Order value {formatCurrency(totalSelectedAmount)} {totalSelectedAmount >= currentSupplier.targetMoq ? 'exceeds' : 'below'} {formatCurrency(currentSupplier.targetMoq)} minimum
+                </span>
+              </div>
+              <div className="po-check">
+                <span className={`po-check-ic ${totalSelectedUnits >= currentSupplier.unitThreshold ? 'pass' : 'fail'}`}>
+                  {totalSelectedUnits >= currentSupplier.unitThreshold ? '✔' : '✖'}
+                </span>
+                <span>
+                  Order units ({totalSelectedUnits} units) {totalSelectedUnits >= currentSupplier.unitThreshold ? 'exceeds' : 'below'} {currentSupplier.unitThreshold} unit freight threshold
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Financial Summary */}
+          <div className="po-sec">
+            <div className="po-sec-title">Financial Summary</div>
+            <div className="po-fin">
+              <div className="po-fin-row">
+                <span className="lbl">Subtotal ({selectedItems.length} SKUs)</span>
+                <span className="val">{formatCurrency(totalSelectedAmount)}</span>
+              </div>
+              <div className="po-fin-row">
+                <span className="lbl">GST / Tax</span>
+                <span className="incl">Included</span>
+              </div>
+              <div className="po-fin-row po-fin-total">
+                <span className="lbl">Total PO Amount</span>
+                <span className="val">{formatCurrency(totalSelectedAmount)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Order Breakdown */}
+          <div className="po-sec" style={{ flex: 1 }}>
+            <div className="po-sec-title">Order Breakdown</div>
+            {selectedItems.length === 0 ? (
+              <div className="po-empty">
+                <div className="po-empty-icon">📋</div>
+                <div className="po-empty-txt">No items selected for this order draft.</div>
+              </div>
+            ) : (
+              <div className="po-bk-list">
+                {selectedItems.map((item) => (
+                  <div key={item.id} className="po-bk-item">
+                    <span className="bk-name" title={item.name}>{item.name}</span>
+                    <span className="bk-units">{item.orderQty} units</span>
+                    <span className="bk-amt">{formatCurrency(item.orderQty * item.unitCost)}</span>
+                  </div>
+                ))}
               </div>
             )}
-          </aside>
-        </div>
-      )}
+          </div>
+
+          {/* Section: Actions */}
+          <div className="po-actions">
+            <button className="po-discard" onClick={handleDiscardChanges}>
+              Discard Changes
+            </button>
+            <button className="po-save" onClick={handleSaveDraft}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/>
+                <polyline points="7 3 7 8 15 8"/>
+              </svg>
+              <span>Save Draft</span>
+            </button>
+            <button
+              className="po-approve"
+              onClick={handleSubmitPO}
+              disabled={selectedItems.length === 0}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="m22 2-7 20-4-9-9-4Z"/>
+                <path d="M22 2 11 13"/>
+              </svg>
+              <span>Approve &amp; Send PO →</span>
+            </button>
+          </div>
+        </aside>
+      </div>
 
       {/* ─── Modal: Unsaved Changes Confirmation ───────────────────────────── */}
       {unsavedDialog.open && (
         <div className="modal-backdrop" onClick={handleResolveKeepEditing}>
-          <div
-            className="modal-card"
-            onClick={(e) => e.stopPropagation()}
-            role="alertdialog"
-            aria-labelledby="unsaved-modal-title"
-          >
+          <div className="modal-card" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <h3 id="unsaved-modal-title" className="modal-title" style={{ color: 'var(--c-low)' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-                Unsaved Quantity Changes
+              <h3 className="modal-title" style={{ color: 'var(--c-low)' }}>
+                ⚠️ Unsaved Quantity Changes
               </h3>
               <button className="modal-close" onClick={handleResolveKeepEditing}>✕</button>
             </div>
             <div className="modal-body">
-              <p style={{ fontSize: 13, color: 'var(--text)' }}>
+              <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
                 You have unsaved changes to Order Quantity for <strong>{unsavedDialog.name}</strong> ({unsavedDialog.sku}).
               </p>
               <div
@@ -1559,45 +2099,170 @@ export default function ReplenishmentPage() {
                   background: 'var(--bg)',
                   border: '1px solid var(--border)',
                   borderRadius: 8,
-                  padding: 12,
+                  padding: 10,
                   fontSize: 12,
                   display: 'flex',
                   justifyContent: 'space-between',
+                  alignItems: 'center',
                 }}
               >
-                <div>
-                  <span style={{ color: 'var(--text3)' }}>Original: </span>
-                  <span style={{ fontWeight: 600 }}>{unsavedDialog.originalQty} units</span>
-                </div>
-                <div>→</div>
-                <div>
-                  <span style={{ color: 'var(--brand)' }}>New Draft: </span>
-                  <span style={{ fontWeight: 700, color: 'var(--brand)' }}>{unsavedDialog.draftQty} units</span>
-                </div>
+                <span style={{ color: 'var(--text2)' }}>Original Qty: <strong>{unsavedDialog.originalQty}</strong></span>
+                <span style={{ color: 'var(--brand)', fontWeight: 600 }}>→</span>
+                <span style={{ color: 'var(--brand)', fontWeight: 700 }}>New Draft Qty: <strong>{unsavedDialog.draftQty}</strong></span>
               </div>
-              <p style={{ fontSize: 12, color: 'var(--text2)' }}>
-                Would you like to save this quantity draft before proceeding, discard it, or keep editing?
+              <p style={{ fontSize: 12, color: 'var(--text3)' }}>
+                Do you want to save these changes before proceeding, discard them, or keep editing?
               </p>
             </div>
             <div className="modal-foot">
-              <button
-                className="btn-secondary"
-                onClick={handleResolveKeepEditing}
-              >
+              <button className="btn-secondary" onClick={handleResolveKeepEditing}>
                 Keep Editing
               </button>
               <button
                 className="btn-secondary"
-                style={{ color: 'var(--c-critical)' }}
-                onClick={handleResolveDiscardProceed}
+                style={{ color: 'var(--c-critical)', borderColor: 'var(--c-critical-bd)' }}
+                onClick={handleResolveDiscardAndProceed}
               >
                 Discard Changes
               </button>
-              <button
-                className="btn-primary"
-                onClick={handleResolveSaveProceed}
-              >
+              <button className="btn-primary" onClick={handleResolveSaveAndProceed}>
                 Save &amp; Proceed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal: Create Manual PO ───────────────────────────────────────── */}
+      {createPoModalOpen && (
+        <div className="modal-backdrop" onClick={() => setCreatePoModalOpen(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3 className="modal-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <line x1="12" y1="18" x2="12" y2="12"/>
+                  <line x1="9" y1="15" x2="15" y2="15"/>
+                </svg>
+                Create Manual Purchase Order
+              </h3>
+              <button className="modal-close" onClick={() => setCreatePoModalOpen(false)}>✕</button>
+            </div>
+            <form onSubmit={handleCreatePoSubmit}>
+              <div className="modal-body">
+                <div className="modal-field">
+                  <label className="modal-label">Select Vendor / Supplier</label>
+                  <select
+                    className="modal-select"
+                    value={newPoSupplier}
+                    onChange={(e) => setNewPoSupplier(e.target.value)}
+                  >
+                    {INITIAL_SUPPLIERS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.category}) — MOQ {formatCurrency(s.targetMoq)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="modal-field">
+                  <label className="modal-label">Receiving Dock &amp; Storage</label>
+                  <select
+                    className="modal-select"
+                    value={newPoDock}
+                    onChange={(e) => setNewPoDock(e.target.value)}
+                  >
+                    <option value="Dock B - Cold Storage">Dock B - Cold Storage (Refrigerated)</option>
+                    <option value="Dock A - Dry Goods">Dock A - Dry Goods &amp; Bakery</option>
+                    <option value="Dock C - Fresh Produce">Dock C - Fresh Produce Inspection</option>
+                  </select>
+                </div>
+                <div className="modal-field">
+                  <label className="modal-label">Purchase Order Notes &amp; Special Instructions</label>
+                  <textarea
+                    className="modal-textarea"
+                    rows="3"
+                    placeholder="e.g. Schedule delivery before 10 AM, priority dock assignment..."
+                    value={newPoNotes}
+                    onChange={(e) => setNewPoNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-foot">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setCreatePoModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary">
+                  Create PO Draft
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal: View Pending Manifests ─────────────────────────────────── */}
+      {manifestsModalOpen && (
+        <div className="modal-backdrop" onClick={() => setManifestsModalOpen(false)}>
+          <div className="modal-card" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3 className="modal-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="1" y="3" width="15" height="13"/>
+                  <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+                </svg>
+                Pending Receiving Manifests
+              </h3>
+              <button className="modal-close" onClick={() => setManifestsModalOpen(false)}>✕</button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: 380, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {INITIAL_MANIFESTS.map((m) => (
+                  <div
+                    key={m.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 14px',
+                      background: 'var(--bg)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>
+                        {m.id} — {m.supplier}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                        Truck: {m.truck} • {m.items} units • ETA: {m.eta}
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: '3px 8px',
+                        borderRadius: 12,
+                        background: m.status === 'In Transit' ? '#eff6ff' : m.status === 'Dock Scheduled' ? '#fffbeb' : '#f0fdf4',
+                        color: m.status === 'In Transit' ? '#1d4ed8' : m.status === 'Dock Scheduled' ? '#b45309' : '#15803d',
+                      }}
+                    >
+                      {m.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="modal-foot">
+              <button
+                className="btn-secondary"
+                onClick={() => setManifestsModalOpen(false)}
+              >
+                Close
               </button>
             </div>
           </div>
@@ -1616,7 +2281,7 @@ export default function ReplenishmentPage() {
             </div>
             <div className="modal-body">
               <p style={{ fontSize: 13, color: 'var(--text)' }}>
-                Purchase Order for <strong>{selectedItems.length} SKUs</strong> has been successfully transmitted to the EDI Gateway.
+                Purchase Order <strong>#PO-2026-104</strong> for <strong>{currentSupplier.name}</strong> has been submitted to EDI Gateway.
               </p>
               <div
                 style={{
@@ -1636,11 +2301,11 @@ export default function ReplenishmentPage() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--text2)' }}>Units Ordered:</span>
-                  <span style={{ fontWeight: 600 }}>{totalSelectedUnits} units across {selectedItems.length} SKUs</span>
+                  <span style={{ fontWeight: 600 }}>{totalSelectedUnits} units</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text2)' }}>Suppliers Involved:</span>
-                  <span style={{ fontWeight: 600 }}>{draftsBySupplier.length} Supplier(s)</span>
+                  <span style={{ color: 'var(--text2)' }}>Expected Delivery:</span>
+                  <span style={{ fontWeight: 600 }}>Within {currentSupplier.leadTime}</span>
                 </div>
               </div>
             </div>
@@ -1649,8 +2314,7 @@ export default function ReplenishmentPage() {
                 className="btn-primary"
                 onClick={() => {
                   setPoSuccessModalOpen(false);
-                  setSummaryDrawerOpen(false);
-                  showToast('PO confirmed. Inventory awaiting vendor delivery.');
+                  showToast('PO-2026-104 confirmed. Inventory awaiting vendor delivery.');
                 }}
               >
                 Done
@@ -1668,118 +2332,4 @@ export default function ReplenishmentPage() {
       )}
     </div>
   );
-
-  // Helper to render product row
-  function renderProductRow(prod) {
-    const isEditingThis = editingSku === prod.sku;
-    const isKbFocused = focusedRowIndex !== null && sortedProducts[focusedRowIndex]?.id === prod.id;
-    const lineSubtotal = prod.orderQty * prod.unitCost;
-    const sup = INITIAL_SUPPLIERS.find((s) => s.id === prod.supplierId);
-
-    return (
-      <tr
-        key={prod.id}
-        className={`pr ${prod.selected ? 'sel' : ''} ${isKbFocused ? 'kb-focused' : ''}`}
-        role="row"
-        aria-selected={prod.selected}
-        tabIndex={-1}
-        onClick={() => setFocusedRowIndex(sortedProducts.findIndex((p) => p.id === prod.id))}
-      >
-        <td className="col-chk" role="gridcell">
-          <input
-            type="checkbox"
-            className="cb"
-            checked={prod.selected}
-            onChange={() => handleToggleSelect(prod.id)}
-            aria-label={`Select ${prod.name}`}
-          />
-        </td>
-        <td className="col-sku" role="gridcell">
-          <span className="sku-lbl">{prod.sku}</span>
-        </td>
-        <td className="col-name" role="gridcell">
-          <div className="prod-name">{prod.name}</div>
-          <div className="prod-cat">{prod.category}</div>
-        </td>
-        <td className="col-sup" role="gridcell">
-          <div className="sup-pill">
-            <span className="sup-dot" style={{ background: sup?.color || '#2563eb' }}></span>
-            <span>{sup?.name || prod.supplierId}</span>
-          </div>
-        </td>
-        <td className="col-stk" role="gridcell">{prod.currentStock}</td>
-        <td className="col-tgt" role="gridcell">{prod.safetyTarget}</td>
-        <td className="col-st" role="gridcell">
-          <span className={`st-badge ${prod.priority}`}>
-            <span className="st-dot"></span>
-            {prod.priority.charAt(0).toUpperCase() + prod.priority.slice(1)}
-          </span>
-        </td>
-        <td className="col-qty" role="gridcell">
-          {isEditingThis ? (
-            <div className="qty-edit-box">
-              <div className="qty-input-row">
-                <input
-                  type="number"
-                  className="qty-input"
-                  value={editQtyValue}
-                  onChange={(e) => {
-                    setEditQtyValue(e.target.value);
-                    setIsUnsaved(true);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSaveInlineQty(prod.sku);
-                    if (e.key === 'Escape') {
-                      if (isUnsaved) {
-                        withUnsavedGuard(() => handleCancelInlineQty());
-                      } else {
-                        handleCancelInlineQty();
-                      }
-                    }
-                  }}
-                  autoFocus
-                  aria-label={`Order quantity for ${prod.name}`}
-                />
-                <button
-                  className="qty-btn-save"
-                  onClick={() => handleSaveInlineQty(prod.sku)}
-                  title="Save quantity (Enter)"
-                >
-                  ↵
-                </button>
-                <button
-                  className="qty-btn-cancel"
-                  onClick={() => {
-                    if (isUnsaved) {
-                      withUnsavedGuard(() => handleCancelInlineQty());
-                    } else {
-                      handleCancelInlineQty();
-                    }
-                  }}
-                  title="Cancel edit (Esc)"
-                >
-                  ✕
-                </button>
-              </div>
-              {isUnsaved && <span className="qty-unsaved-pill">Unsaved draft</span>}
-            </div>
-          ) : (
-            <button
-              className="qty-cell-btn"
-              onClick={() => withUnsavedGuard(() => handleStartEdit(prod))}
-              title="Click or press F2/Enter to edit order quantity"
-            >
-              <span>{prod.orderQty} units</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-            </button>
-          )}
-        </td>
-        <td className="col-cost" role="gridcell">{formatCurrency(prod.unitCost)}</td>
-        <td className="col-sub" role="gridcell">{formatCurrency(lineSubtotal)}</td>
-      </tr>
-    );
-  }
 }
