@@ -1,0 +1,50 @@
+/* src/styles/responsive.css
+   Responsive breakpoint helpers and layout rules.
+*/
+
+/* Breakpoint reference (use in JS as needed):
+   xs:  < 480px
+   sm:  480px
+   md:  768px
+   lg:  1024px
+   xl:  1280px
+   2xl: 1536px
+*/
+
+/* Full-bleed on small screens */
+@media (max-width: 767px) {
+  .layout-page-container {
+    padding: var(--space-4);
+  }
+
+  .replenishment-page__body {
+    flex-direction: column;
+  }
+
+  .replenishment-supplier-summary {
+    width: 100%;
+  }
+}
+
+@media (min-width: 768px) {
+  .layout-page-container {
+    padding: var(--space-6) var(--space-8);
+  }
+
+  .replenishment-page__body {
+    display: flex;
+    gap: var(--space-6);
+  }
+
+  .replenishment-supplier-summary {
+    width: 280px;
+    flex-shrink: 0;
+  }
+}
+
+@media (min-width: 1280px) {
+  .layout-page-container {
+    max-width: var(--max-content-width);
+    margin-inline: auto;
+  }
+}

@@ -294,7 +294,17 @@ const formatCurrency = (amt) => {
 export default function ReplenishmentPage() {
   // Theme & State
   const [theme, setTheme] = useState('light');
-  const [appState, setAppState] = useState('default');
+  const [appState, setAppState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search).get('state');
+      if (p) {
+        const s = p.toLowerCase();
+        if (s === 'no_results') return 'empty';
+        if (['loading', 'empty', 'error', 'default'].includes(s)) return s;
+      }
+    }
+    return 'default';
+  });
   const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
 
   // Filters & Sorting
@@ -562,6 +572,7 @@ export default function ReplenishmentPage() {
 
   // Keyboard navigation on dense table (Windows: Up/Down, Space, Enter, F2, Home, End, PageUp/Down, Ctrl+A)
   const handleTableKeyDown = (e) => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
     if (sortedProducts.length === 0) return;
 
     if (e.key === 'ArrowDown') {
