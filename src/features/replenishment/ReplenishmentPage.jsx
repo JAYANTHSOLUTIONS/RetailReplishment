@@ -1,7 +1,45 @@
-import React, { useState, useMemo, useEffect,useRef } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import '../../styles/replenishment.css';
+import {
+  fetchSuppliers,
+  fetchInventory,
+  fetchCategories,
+  fetchSupplierContact,
+  fetchPendingManifests,
+  fetchPOHistory,
+  updateItemOrderQty,
+  toggleItemSelection,
+  clearAllSelection,
+  applySupplierMinimums as applySupplierMinimumsDB,
+  saveDraftPO,
+  submitPurchaseOrder,
+  deletePurchaseOrder,
+  bulkUpdateInventory,
+} from '../../db/queries.js';
+import {
+  validateSupplierMoq,
+  groupSelectedBySupplier,
+} from '../../utils/supplierValidation.js';
+import FilterModal from './FilterModal.jsx';
+import { matchesFilters } from '../../utils/filterRules.js';
+import BulkEditModal from './BulkEditModal.jsx';
+import AddProductModal from './AddProductModal.jsx';
+import AddSupplierModal from './AddSupplierModal.jsx';
+import mainLogo from '../../assets/logos/main-logo.png';
+import draftLogo from '../../assets/logos/draft-logo.png';
+import queueLogo from '../../assets/logos/queue-logo.png';
+import matrixLogo from '../../assets/logos/matrix-logo.png';
+import supplierHFSrc from '../../assets/suppliers/supplier-hf.jpg';
+import supplierBISrc from '../../assets/suppliers/supplier-bi.jpg';
+import supplierNFSrc from '../../assets/suppliers/supplier-nf.jpg';
 
-// ── Mock Initial Data ──────────────────────────────────────────────────────────
+export const SUPPLIER_LOGOS = {
+  hf: supplierHFSrc,
+  bi: supplierBISrc,
+  nf: supplierNFSrc,
+};
+
+// ── Initial Seed / Fallback Data ──────────────────────────────────────────────
 const INITIAL_SUPPLIERS = [
   {
     id: 'hf',
@@ -21,6 +59,7 @@ const INITIAL_SUPPLIERS = [
     category: 'Snacks & Biscuits',
     initials: 'BI',
     badge: null,
+    badgeType: null,
     targetMoq: 8000,
     unitThreshold: 40,
     leadTime: '4d',
@@ -53,9 +92,9 @@ const INITIAL_PRODUCTS = [
     safetyTarget: 50,
     status: 'critical',
     priority: 'critical',
-    orderQty: 50,
+    orderQty: 0,
     unitCost: 90,
-    selected: true,
+    selected: false,
   },
   {
     id: 'hf-002',
@@ -67,9 +106,9 @@ const INITIAL_PRODUCTS = [
     safetyTarget: 60,
     status: 'critical',
     priority: 'critical',
-    orderQty: 60,
+    orderQty: 0,
     unitCost: 90,
-    selected: true,
+    selected: false,
   },
   {
     id: 'hf-003',
@@ -81,9 +120,9 @@ const INITIAL_PRODUCTS = [
     safetyTarget: 40,
     status: 'critical',
     priority: 'critical',
-    orderQty: 40,
+    orderQty: 0,
     unitCost: 108.75,
-    selected: true,
+    selected: false,
   },
   {
     id: 'hf-020',
@@ -194,9 +233,9 @@ const INITIAL_PRODUCTS = [
     safetyTarget: 60,
     status: 'critical',
     priority: 'critical',
-    orderQty: 46,
+    orderQty: 0,
     unitCost: 30,
-    selected: true,
+    selected: false,
   },
   {
     id: 'bi-002',
@@ -208,9 +247,9 @@ const INITIAL_PRODUCTS = [
     safetyTarget: 50,
     status: 'critical',
     priority: 'critical',
-    orderQty: 40,
+    orderQty: 0,
     unitCost: 35,
-    selected: true,
+    selected: false,
   },
   {
     id: 'bi-003',
@@ -222,9 +261,9 @@ const INITIAL_PRODUCTS = [
     safetyTarget: 40,
     status: 'critical',
     priority: 'critical',
-    orderQty: 28,
+    orderQty: 0,
     unitCost: 50,
-    selected: true,
+    selected: false,
   },
   // Nature's Farm Items
   {
@@ -243,31 +282,64 @@ const INITIAL_PRODUCTS = [
   },
 ];
 
-// Helper formatter
-const formatCurrency = (val) => `₹${Number(val).toLocaleString('en-IN')}`;
+// Helper currency formatter
+const formatCurrency = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
 
 export default function ReplenishmentPage() {
-  // Theme state: 'light' | 'dark' | 'system'
-  const [theme, setTheme] = useState('light');
-  // View State simulator: 'default' | 'loading' | 'empty' | 'no_results' | 'error'
-  const [appState, setAppState] = useState('default');
-  const [stateDropdownOpen, setStateDropdownOpen] = useState(false);
+  // Genuine application load & error states
+  const [isLoading, setIsLoading] = useState(true);
+  const [dbError, setDbError] = useState(null);
 
-  // Active supplier
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  // Active supplier & search
   const [selectedSupplierId, setSelectedSupplierId] = useState('hf');
-  // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('priority');
 
-  // Products Data State
+  // Advanced Filter Modal State
+  const [appliedFilters, setAppliedFilters] = useState({
+    statuses: [],
+    suppliers: [],
+    categories: [],
+    stockLevels: [],
+    search: '',
+  });
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [bulkEditModalOpen, setBulkEditModalOpen] = useState(false);
+  const [addProductModalOpen, setAddProductModalOpen] = useState(false);
+  const [addSupplierModalOpen, setAddSupplierModalOpen] = useState(false);
+
+  // Categories list from SQLite
+  const [categories, setCategories] = useState([]);
+
+  // SQLite Backed State
+  const [suppliers, setSuppliers] = useState(INITIAL_SUPPLIERS);
   const [products, setProducts] = useState(INITIAL_PRODUCTS);
 
-  // Edit quantity state for inline editing (e.g. Fresh Milk 1L)
-  const [editingSku, setEditingSku] = useState('HF-001');
-  const [editQtyValue, setEditQtyValue] = useState('50');
-  const [isUnsaved, setIsUnsaved] = useState(true);
+  // Expandable & Collapsible Side Panels State (Horizontal side positions)
+  const [sqExpanded, setSqExpanded] = useState(false);
+  const [draftExpanded, setDraftExpanded] = useState(false);
 
-  // Unsaved Changes Confirmation Modal state
+  // Supplier Quick-Action Modals State
+  const [manifestsModalOpen, setManifestsModalOpen] = useState(false);
+  const [manifestsList, setManifestsList] = useState([]);
+  const [poHistoryModalOpen, setPoHistoryModalOpen] = useState(false);
+  const [poHistoryList, setPoHistoryList] = useState([]);
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [contactData, setContactData] = useState(null);
+
+  // State-Changing Confirmation Modal
+  const [confirmModalConfig, setConfirmModalConfig] = useState(null);
+  const [isDispatching, setIsDispatching] = useState(false);
+
+  // Inline editing state
+  const [editingSku, setEditingSku] = useState(null);
+  const [editQtyValue, setEditQtyValue] = useState('0');
+  const [isUnsaved, setIsUnsaved] = useState(false);
+
+  // Unsaved quantity changes modal
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
 
@@ -279,44 +351,65 @@ export default function ReplenishmentPage() {
   const searchInputRef = useRef(null);
   const tableRef = useRef(null);
 
-  // Listen to ?state= URL query parameter on mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const qState = params.get('state');
-    if (qState && ['default', 'loading', 'empty', 'no_results', 'error'].includes(qState.toLowerCase())) {
-      setAppState(qState.toLowerCase());
-    }
-  }, []);
-
-  // Synchronize theme with data-theme attribute on documentElement
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'system') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-    } else {
-      root.setAttribute('data-theme', theme);
-    }
-  }, [theme]);
-
-  // Click outside listener for state dropdown
-  useEffect(() => {
-    if (!stateDropdownOpen) return;
-    const handleClickOutside = (e) => {
-      if (!e.target.closest('.state-dropdown-wrap')) {
-        setStateDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [stateDropdownOpen]);
-
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Safe action check: prompt confirmation modal if changes are unsaved
+  // ── 1. Initialize SQLite Database & Load Authoritative Data ───────────────────
+  const loadSQLiteData = async () => {
+    setIsLoading(true);
+    setDbError(null);
+    try {
+      const [sups, prods, cats] = await Promise.all([
+        fetchSuppliers(),
+        fetchInventory(),
+        fetchCategories(),
+      ]);
+      if (sups && sups.length > 0) setSuppliers(sups);
+      if (prods && prods.length > 0) setProducts(prods);
+      if (cats && cats.length > 0) setCategories(cats);
+    } catch (err) {
+      console.error('[App] SQLite Data Loading Error:', err);
+      setDbError(err?.message || 'Unable to load replenishment data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const [sups, prods, cats] = await Promise.all([
+          fetchSuppliers(),
+          fetchInventory(),
+          fetchCategories(),
+        ]);
+        if (!active) return;
+        if (sups && sups.length > 0) setSuppliers(sups);
+        if (prods && prods.length > 0) {
+          setProducts(prods);
+          if (prods.some((p) => p.selected && p.orderStatus !== 'ordered')) {
+            setSqExpanded(true);
+            setDraftExpanded(true);
+          }
+        }
+        if (cats && cats.length > 0) setCategories(cats);
+      } catch (err) {
+        if (!active) return;
+        console.error('[App] SQLite Data Loading Error:', err);
+        setDbError(err?.message || 'Unable to load replenishment data');
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Safe action check: prompt confirmation modal if inline changes are unsaved
   const requestActionWithUnsavedCheck = (action) => {
     if (isUnsaved) {
       setPendingAction(() => action);
@@ -346,59 +439,577 @@ export default function ReplenishmentPage() {
     setPendingAction(null);
   };
 
-  const handleDiscardChanges = () => {
+  // Suppliers map for fast O(1) lookups
+  const suppliersMap = useMemo(() => {
+    const map = {};
+    suppliers.forEach((s) => {
+      map[s.id] = s;
+    });
+    return map;
+  }, [suppliers]);
+
+  // Active supplier object
+  const currentSupplier = useMemo(() => {
+    return suppliers.find((s) => s.id === selectedSupplierId) || suppliers[0] || INITIAL_SUPPLIERS[0];
+  }, [suppliers, selectedSupplierId]);
+
+  // Active filter count
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (appliedFilters.statuses?.length) count += appliedFilters.statuses.length;
+    if (appliedFilters.suppliers?.length) count += appliedFilters.suppliers.length;
+    if (appliedFilters.categories?.length) count += appliedFilters.categories.length;
+    if (appliedFilters.stockLevels?.length) count += appliedFilters.stockLevels.length;
+    if (appliedFilters.search?.trim()) count += 1;
+    return count;
+  }, [appliedFilters]);
+
+  const hasActiveFilters = activeFilterCount > 0;
+
+  // Filter products using global search + advanced filter rules (AND across groups, OR within group)
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      if (searchTerm.trim()) {
+        const q = searchTerm.trim().toLowerCase();
+        const match =
+          p.name.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q) ||
+          p.category.toLowerCase().includes(q) ||
+          p.id.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return matchesFilters(p, appliedFilters);
+    });
+  }, [products, appliedFilters, searchTerm]);
+
+  // Stable default ordering: ascending Product ID
+  const displayProducts = useMemo(() => {
+    const list = [...filteredProducts];
+    return list.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [filteredProducts]);
+
+  // Total items and pagination calculations
+  const totalItems = displayProducts.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
+  // Auto-reset page 1 on filter/search change and clamp page when totalPages shrinks (during render)
+  const [prevFilterKey, setPrevFilterKey] = useState('');
+  const currentFilterKey = `${searchTerm}::${JSON.stringify(appliedFilters)}`;
+  if (prevFilterKey !== currentFilterKey) {
+    setPrevFilterKey(currentFilterKey);
+    setCurrentPage(1);
+  } else if (currentPage > totalPages) {
+    setCurrentPage(totalPages);
+  }
+
+  const startIndex = totalItems === 0 ? 0 : (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalItems);
+
+  // Sliced data for current page view
+  const paginatedProducts = useMemo(() => {
+    return displayProducts.slice(startIndex, endIndex);
+  }, [displayProducts, startIndex, endIndex]);
+
+  // Safe page navigation with unsaved changes confirmation
+  const handlePageChange = (newPage) => {
+    if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
+    requestActionWithUnsavedCheck(() => {
+      setCurrentPage(newPage);
+      setFocusedRowIndex(0);
+    });
+  };
+
+  const handlePageSizeChange = (newSize) => {
+    const size = Number(newSize);
+    requestActionWithUnsavedCheck(() => {
+      setPageSize(size);
+      setCurrentPage(1);
+      setFocusedRowIndex(0);
+    });
+  };
+
+  // Page numbers list with ellipsis for responsive pagination
+  const pageNumbers = useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages = [];
+    if (currentPage <= 4) {
+      for (let i = 1; i <= 5; i++) pages.push(i);
+      pages.push('...');
+      pages.push(totalPages);
+    } else if (currentPage >= totalPages - 3) {
+      pages.push(1);
+      pages.push('...');
+      for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      pages.push('...');
+      pages.push(currentPage - 1);
+      pages.push(currentPage);
+      pages.push(currentPage + 1);
+      pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  }, [currentPage, totalPages]);
+
+  // Selected products across all suppliers (preserved across pages)
+  const selectedProducts = useMemo(() => {
+    return products.filter((p) => p.selected && p.orderStatus !== 'ordered');
+  }, [products]);
+
+  // Derived selection-based panel visibility: True if >= 1 eligible product is ticked
+  const hasEligibleSelection = useMemo(() => {
+    return products.some((p) => p.selected && p.orderStatus !== 'ordered');
+  }, [products]);
+
+  // Contextual Supplier Queue:
+  // Shows suppliers relevant to selected products and active filters
+  const activeQueueSuppliers = useMemo(() => {
+    const suppliersWithSelected = new Set(
+      products.filter((p) => p.selected && p.orderStatus !== 'ordered').map((p) => p.supplierId)
+    );
+
+    let eligibleIds = new Set();
+    suppliersWithSelected.forEach((id) => eligibleIds.add(id));
+    if (hasActiveFilters) {
+      filteredProducts.forEach((p) => eligibleIds.add(p.supplierId));
+    }
+
+    if (eligibleIds.size === 0) {
+      return suppliers;
+    }
+
+    return suppliers.filter((s) => eligibleIds.has(s.id));
+  }, [hasActiveFilters, filteredProducts, products, suppliers]);
+
+  // Ensure selectedSupplierId points to an active supplier in queue if available
+  useEffect(() => {
+    if (activeQueueSuppliers.length > 0) {
+      if (!activeQueueSuppliers.some((s) => s.id === selectedSupplierId)) {
+        const timer = setTimeout(() => {
+          setSelectedSupplierId(activeQueueSuppliers[0].id);
+        }, 0);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [activeQueueSuppliers, selectedSupplierId]);
+
+  // Selected items calculations for active supplier draft
+  const selectedItems = useMemo(() => {
+    return products.filter((p) => p.supplierId === selectedSupplierId && p.selected && p.orderQty > 0 && p.orderStatus !== 'ordered');
+  }, [products, selectedSupplierId]);
+
+  // Authoritative supplier MOQ & threshold validation
+  const supplierValidation = useMemo(() => {
+    return validateSupplierMoq(currentSupplier, selectedItems);
+  }, [currentSupplier, selectedItems]);
+
+  const totalSelectedUnits = supplierValidation.totalUnits;
+  const totalSelectedAmount = supplierValidation.subtotal;
+
+  // Selected products grouped by supplier for Review Summary
+  const selectedSupplierGroups = useMemo(() => {
+    const allSelected = products.filter((p) => p.selected && p.orderQty > 0 && p.orderStatus !== 'ordered');
+    return groupSelectedBySupplier(allSelected, suppliers);
+  }, [products, suppliers]);
+
+  // Eligible products on current page vs whole filtered set
+  const eligiblePageProducts = useMemo(() => {
+    return paginatedProducts.filter((p) => p.orderStatus !== 'ordered');
+  }, [paginatedProducts]);
+
+  const eligibleFilteredProducts = useMemo(() => {
+    return displayProducts.filter((p) => p.orderStatus !== 'ordered');
+  }, [displayProducts]);
+
+  const isPageAllSelected = eligiblePageProducts.length > 0 && eligiblePageProducts.every((p) => p.selected);
+  const isPageSomeSelected = eligiblePageProducts.some((p) => p.selected) && !isPageAllSelected;
+
+  const isAllFilteredSelected = eligibleFilteredProducts.length > 0 && eligibleFilteredProducts.every((p) => p.selected);
+
+  // Horizontal grid column definition for 4-column side workspace layout
+  const gridColumns = useMemo(() => {
+    const col1 = '52px';
+    const col2 = sqExpanded ? '260px' : '44px';
+    const col3 = '1fr';
+    const col4 = draftExpanded ? '320px' : '44px';
+    return `${col1} ${col2} ${col3} ${col4}`;
+  }, [sqExpanded, draftExpanded]);
+
+  // ── Database Mutation Handlers (Selection Protected by Unsaved Checks) ──────
+
+  // Toggle selection for current visible page
+  const handleToggleSelectPage = () => {
+    requestActionWithUnsavedCheck(async () => {
+      const nextVal = !isPageAllSelected;
+      const eligibleIds = eligiblePageProducts.map((p) => p.id);
+      try {
+        for (const id of eligibleIds) {
+          const prod = products.find((x) => x.id === id);
+          const nextQty = nextVal && prod.orderQty === 0 ? Math.max(0, prod.safetyTarget - prod.currentStock) : prod.orderQty;
+          await toggleItemSelection(id, nextVal, nextQty);
+        }
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (eligibleIds.includes(p.id)) {
+              return {
+                ...p,
+                selected: nextVal,
+                orderQty: nextVal && p.orderQty === 0 ? Math.max(0, p.safetyTarget - p.currentStock) : p.orderQty,
+              };
+            }
+            return p;
+          })
+        );
+        if (nextVal && eligibleIds.length > 0) {
+          const firstSelected = products.find((x) => x.id === eligibleIds[0]);
+          if (firstSelected) setSelectedSupplierId(firstSelected.supplierId);
+          setSqExpanded(true);
+          setDraftExpanded(true);
+        } else {
+          const remainingSelected = products.some((p) => !eligibleIds.includes(p.id) && p.selected && p.orderStatus !== 'ordered');
+          if (!remainingSelected) {
+            setSqExpanded(false);
+            setDraftExpanded(false);
+          }
+        }
+      } catch {
+        console.warn('Error updating page selection');
+      }
+    });
+  };
+
+  // Explicitly select all filtered products across all pages
+  const handleSelectAllFiltered = () => {
+    requestActionWithUnsavedCheck(async () => {
+      const nextVal = true;
+      const eligibleIds = eligibleFilteredProducts.map((p) => p.id);
+      try {
+        for (const id of eligibleIds) {
+          const prod = products.find((x) => x.id === id);
+          const nextQty = nextVal && prod.orderQty === 0 ? Math.max(0, prod.safetyTarget - prod.currentStock) : prod.orderQty;
+          await toggleItemSelection(id, nextVal, nextQty);
+        }
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (eligibleIds.includes(p.id)) {
+              return {
+                ...p,
+                selected: nextVal,
+                orderQty: nextVal && p.orderQty === 0 ? Math.max(0, p.safetyTarget - p.currentStock) : p.orderQty,
+              };
+            }
+            return p;
+          })
+        );
+        if (eligibleIds.length > 0) {
+          const firstSelected = products.find((x) => x.id === eligibleIds[0]);
+          if (firstSelected) setSelectedSupplierId(firstSelected.supplierId);
+          setSqExpanded(true);
+          setDraftExpanded(true);
+        }
+        showToast(`Selected all ${eligibleIds.length} filtered products.`);
+      } catch {
+        console.warn('Error selecting all filtered products');
+      }
+    });
+  };
+
+  // Clear all selections
+  const handleClearAllSelections = () => {
+    requestActionWithUnsavedCheck(async () => {
+      try {
+        await clearAllSelection();
+        setProducts((prev) => prev.map((p) => ({ ...p, selected: false })));
+        setSqExpanded(false);
+        setDraftExpanded(false);
+        showToast('Selection cleared.');
+      } catch {
+        showToast('Failed to clear selections in SQLite.', 'warn');
+      }
+    });
+  };
+
+  // Row selection toggle
+  const handleToggleSelect = (id) => {
+    requestActionWithUnsavedCheck(async () => {
+      const target = products.find((p) => p.id === id);
+      if (!target || target.orderStatus === 'ordered') return;
+      const nextSelected = !target.selected;
+      let nextQty = target.orderQty;
+      if (nextSelected && target.orderQty === 0) {
+        nextQty = Math.max(0, target.safetyTarget - target.currentStock);
+      }
+      try {
+        await toggleItemSelection(id, nextSelected, nextQty);
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.id === id) {
+              return { ...p, selected: nextSelected, orderQty: nextQty };
+            }
+            return p;
+          })
+        );
+        if (nextSelected) {
+          setSelectedSupplierId(target.supplierId);
+          setSqExpanded(true);
+          setDraftExpanded(true);
+        } else {
+          const remainingSelected = products.some((p) => p.id !== id && p.selected && p.orderStatus !== 'ordered');
+          if (!remainingSelected) {
+            setSqExpanded(false);
+            setDraftExpanded(false);
+          }
+        }
+      } catch {
+        console.warn('Error updating item selection');
+      }
+    });
+  };
+
+  // Bulk edit handler
+  const handleBulkEdit = async (targetIds, updates) => {
+    await bulkUpdateInventory(targetIds, updates);
+    const updated = await fetchInventory();
+    setProducts(updated);
+    const cats = await fetchCategories();
+    setCategories(cats);
+    showToast(`Bulk updated ${targetIds.length} items successfully.`);
+  };
+
+  // Product created handler
+  const handleProductCreated = async (newProduct) => {
+    const updated = await fetchInventory();
+    setProducts(updated);
+    const cats = await fetchCategories();
+    setCategories(cats);
+    showToast(`Product "${newProduct.name}" (${newProduct.sku}) created successfully.`);
+  };
+
+  // Supplier created handler
+  const handleSupplierCreated = async (newSupplier) => {
+    const updated = await fetchSuppliers();
+    setSuppliers(updated);
+    showToast(`Supplier "${newSupplier.name}" created successfully.`);
+  };
+
+  // Save inline quantity edit
+  const handleSaveInlineQty = async (sku) => {
+    const parsed = parseInt(editQtyValue, 10);
+    const validQty = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+    try {
+      await updateItemOrderQty(sku, validQty);
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.sku === sku) {
+            return {
+              ...p,
+              orderQty: validQty,
+              selected: validQty > 0,
+            };
+          }
+          return p;
+        })
+      );
+      setEditingSku(null);
+      setIsUnsaved(false);
+      showToast(`Updated quantity for ${sku} to ${validQty} units.`);
+    } catch {
+      showToast('Failed to persist quantity update to SQLite.', 'warn');
+    }
+  };
+
+  const handleCancelInlineQty = () => {
+    const currentProd = products.find((p) => p.sku === editingSku);
+    const originalVal = currentProd ? String(currentProd.orderQty) : '';
+    if (!isUnsaved || editQtyValue === originalVal) {
+      setEditingSku(null);
+      setIsUnsaved(false);
+      return;
+    }
     requestActionWithUnsavedCheck(() => {
       confirmDiscardUnsaved();
     });
   };
 
-  const currentSupplier = useMemo(() => {
-    return INITIAL_SUPPLIERS.find((s) => s.id === selectedSupplierId) || INITIAL_SUPPLIERS[0];
-  }, [selectedSupplierId]);
-
-  // Filter products by selected supplier and search
-  const supplierProducts = useMemo(() => {
-    return products.filter((p) => p.supplierId === selectedSupplierId);
-  }, [products, selectedSupplierId]);
-
-  const filteredProducts = useMemo(() => {
-    return supplierProducts.filter((p) => {
-      const matchSearch =
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.category.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchSearch;
-    });
-  }, [supplierProducts, searchTerm]);
-
-  // Sort products
-  const sortedProducts = useMemo(() => {
-    const list = [...filteredProducts];
-    if (sortBy === 'priority') {
-      const order = { critical: 1, low: 2, healthy: 3 };
-      return list.sort((a, b) => order[a.priority] - order[b.priority]);
-    } else if (sortBy === 'stock_low') {
-      return list.sort((a, b) => a.currentStock - b.currentStock);
-    } else if (sortBy === 'safety_target') {
-      return list.sort((a, b) => b.safetyTarget - a.safetyTarget);
-    } else if (sortBy === 'subtotal') {
-      return list.sort((a, b) => b.orderQty * b.unitCost - a.orderQty * a.unitCost);
+  // Apply Supplier Minimums with SQLite persistence
+  const handleApplySupplierMinimums = async () => {
+    try {
+      await applySupplierMinimumsDB(selectedSupplierId);
+      const updatedProds = await fetchInventory(selectedSupplierId);
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.supplierId === selectedSupplierId) {
+            const found = updatedProds.find((u) => u.id === p.id);
+            return found || p;
+          }
+          return p;
+        })
+      );
+      showToast(`Applied safety thresholds for ${currentSupplier.name}`);
+    } catch {
+      showToast('Failed to apply supplier minimums in SQLite.', 'warn');
     }
-    return list;
-  }, [filteredProducts, sortBy]);
+  };
 
-  // Map each product ID to its flat index in sortedProducts for keyboard navigation
-  const globalRowIndices = useMemo(() => {
-    const map = {};
-    sortedProducts.forEach((p, idx) => {
-      map[p.id] = idx;
+  // ── Confirmation Workflows: Cancel, Save Draft, Submit PO, Delete PO ─────────
+
+  // Cancel selection workflow (replaces old Discard Changes button)
+  const handlePromptCancel = () => {
+    if (selectedItems.length === 0 && !isUnsaved) {
+      showToast('No active selection to cancel.');
+      return;
+    }
+    setConfirmModalConfig({
+      title: 'Cancel Inventory Selection?',
+      message: `Are you sure you want to cancel the current selection? All selected checkboxes (${selectedItems.length} items) will be cleared.`,
+      confirmText: 'Confirm Cancel',
+      confirmClass: 'btn-danger',
+      onConfirm: async () => {
+        try {
+          await clearAllSelection();
+          setProducts((prev) => prev.map((p) => ({ ...p, selected: false })));
+          setIsUnsaved(false);
+          setSqExpanded(false);
+          setDraftExpanded(false);
+          setConfirmModalConfig(null);
+          showToast('Selection cancelled successfully.');
+        } catch {
+          showToast('Failed to clear selection in database.', 'warn');
+        }
+      },
+      onCancel: () => setConfirmModalConfig(null),
     });
-    return map;
-  }, [sortedProducts]);
+  };
 
-  // Global & Table Keyboard Navigation Shortcuts
+  // Save Draft workflow with SQLite persistence
+  const handlePromptSaveDraft = () => {
+    setConfirmModalConfig({
+      title: 'Save Purchase Order Draft?',
+      message: `Save current draft for ${currentSupplier.name} with ${selectedItems.length} items totaling ${formatCurrency(totalSelectedAmount)} to the SQLite database?`,
+      confirmText: 'Save Draft',
+      confirmClass: 'btn-primary-action',
+      onConfirm: async () => {
+        try {
+          await saveDraftPO({
+            supplierId: selectedSupplierId,
+            items: selectedItems,
+            subtotal: totalSelectedAmount,
+            tax: 0,
+            totalAmount: totalSelectedAmount,
+            notes: `Draft updated on ${new Date().toLocaleDateString()}`,
+          });
+          setIsUnsaved(false);
+          setConfirmModalConfig(null);
+          showToast('Changes saved successfully.');
+        } catch (err) {
+          showToast('Failed to save draft to database: ' + err.message, 'warn');
+        }
+      },
+      onCancel: () => setConfirmModalConfig(null),
+    });
+  };
+
+  // Submit & Dispatch PO workflow with SQLite persistence, validation, and horizontal auto-collapse
+  const handlePromptSubmitPO = () => {
+    // 1. Guard against uncommitted inline quantity edits
+    if (isUnsaved) {
+      showToast('Please save or cancel inline quantity editing before dispatching.', 'warn');
+      return;
+    }
+
+    // 2. Validate selection
+    if (selectedItems.length === 0) {
+      showToast('Cannot dispatch empty purchase order. Select products from the matrix first.', 'warn');
+      return;
+    }
+
+    // 3. Enforce supplier MOQ and unit threshold requirements
+    if (!supplierValidation.valid) {
+      showToast(supplierValidation.message || 'Supplier minimum order requirement not satisfied.', 'warn');
+      return;
+    }
+
+    setConfirmModalConfig({
+      title: 'Dispatch Purchase Order?',
+      message: `Confirm local dispatch of purchase order for ${currentSupplier.name}? (${selectedItems.length} SKUs, total ${formatCurrency(totalSelectedAmount)}). This will record the order in SQLite, clear active selections, and refresh inventory status.`,
+      confirmText: isDispatching ? 'Dispatching...' : 'Confirm & Dispatch',
+      confirmClass: 'btn-primary-action',
+      onConfirm: async () => {
+        setIsDispatching(true);
+        try {
+          const res = await submitPurchaseOrder({
+            supplierId: selectedSupplierId,
+            items: selectedItems,
+            subtotal: totalSelectedAmount,
+            tax: 0,
+            totalAmount: totalSelectedAmount,
+            notes: `Dispatched locally from Replenishment Desk`,
+          });
+
+          // 1. Untick every row included in the dispatched order & reset select states
+          setProducts((prev) =>
+            prev.map((p) => {
+              if (selectedItems.some((sel) => sel.id === p.id || sel.sku === p.sku)) {
+                return { ...p, selected: false, orderQty: 0 };
+              }
+              return p;
+            })
+          );
+          setSqExpanded(false);
+          setDraftExpanded(false);
+
+          // 2. Reload authoritative inventory from SQLite & recalculate priorities
+          const refreshedInventory = await fetchInventory();
+          setProducts(refreshedInventory);
+
+          // 3. Refresh purchase order history so completed order is immediately visible
+          const updatedHistory = await fetchPOHistory(selectedSupplierId);
+          setPoHistoryList(updatedHistory);
+
+          // 4. Close confirmation dialog
+          setConfirmModalConfig(null);
+
+          // 5. Honest success feedback without fabricating external API transmission
+          showToast(`PO #${res.poNumber} recorded locally and ready for dispatch! (${formatCurrency(totalSelectedAmount)})`);
+        } catch (err) {
+          showToast('Dispatch failed: ' + err.message + '. Selection and draft preserved.', 'warn');
+        } finally {
+          setIsDispatching(false);
+        }
+      },
+      onCancel: () => setConfirmModalConfig(null),
+    });
+  };
+
+  // Delete/Cancel PO from history workflow
+  const handlePromptDeletePO = (po) => {
+    setConfirmModalConfig({
+      title: 'Remove Purchase Order?',
+      message: `Are you sure you want to remove ${po.poNumber}? This record will be deleted from SQLite.`,
+      confirmText: 'Delete PO',
+      confirmClass: 'btn-danger',
+      onConfirm: async () => {
+        try {
+          await deletePurchaseOrder(po.id);
+          setPoHistoryList((prev) => prev.filter((p) => p.id !== po.id));
+          setConfirmModalConfig(null);
+          showToast(`${po.poNumber} removed successfully.`);
+        } catch {
+          showToast('Failed to delete purchase order.', 'warn');
+        }
+      },
+      onCancel: () => setConfirmModalConfig(null),
+    });
+  };
+
+  // ── Global Keyboard Shortcuts ───────────────────────────────────────────────
+  const handleGlobalKeyDownRef = useRef();
+
   useEffect(() => {
-    const handleGlobalKeyDown = (e) => {
+    handleGlobalKeyDownRef.current = (e) => {
       const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
 
       // Windows Ctrl+K (or Mac Cmd+K) to focus global search
@@ -408,21 +1019,49 @@ export default function ReplenishmentPage() {
         return;
       }
 
-      // Windows Ctrl+S (or Mac Cmd+S) to save draft
+      // Windows Ctrl+S (or Mac Cmd+S) to save draft with SQLite confirmation
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        handleSaveDraft();
+        handlePromptSaveDraft();
         return;
       }
 
-      // Escape key handler
+      // Escape key handler: dismiss open modals or cancel edit
       if (e.key === 'Escape') {
-        if (showUnsavedModal) {
-          cancelDiscardUnsaved();
+        if (confirmModalConfig) {
+          setConfirmModalConfig(null);
           return;
         }
-        if (stateDropdownOpen) {
-          setStateDropdownOpen(false);
+        if (manifestsModalOpen) {
+          setManifestsModalOpen(false);
+          return;
+        }
+        if (poHistoryModalOpen) {
+          setPoHistoryModalOpen(false);
+          return;
+        }
+        if (contactModalOpen) {
+          setContactModalOpen(false);
+          return;
+        }
+        if (filterModalOpen) {
+          setFilterModalOpen(false);
+          return;
+        }
+        if (bulkEditModalOpen) {
+          setBulkEditModalOpen(false);
+          return;
+        }
+        if (addProductModalOpen) {
+          setAddProductModalOpen(false);
+          return;
+        }
+        if (addSupplierModalOpen) {
+          setAddSupplierModalOpen(false);
+          return;
+        }
+        if (showUnsavedModal) {
+          cancelDiscardUnsaved();
           return;
         }
         if (editingSku) {
@@ -431,26 +1070,26 @@ export default function ReplenishmentPage() {
         }
       }
 
-      // If active inside an input, don't hijack table arrow keys
+      // If active inside an input, don't hijack table navigation keys
       if (isInput) return;
 
       // Table navigation: ArrowDown, ArrowUp, Space, Enter, F2, Home, End
-      if (sortedProducts.length === 0) return;
+      if (paginatedProducts.length === 0) return;
 
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setFocusedRowIndex((prev) => (prev >= sortedProducts.length - 1 ? 0 : prev + 1));
+        setFocusedRowIndex((prev) => (prev >= paginatedProducts.length - 1 ? 0 : prev + 1));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setFocusedRowIndex((prev) => (prev <= 0 ? sortedProducts.length - 1 : prev - 1));
+        setFocusedRowIndex((prev) => (prev <= 0 ? paginatedProducts.length - 1 : prev - 1));
       } else if (e.key === ' ') {
         e.preventDefault();
-        const current = sortedProducts[focusedRowIndex];
-        if (current) handleToggleSelect(current.id);
+        const current = paginatedProducts[focusedRowIndex];
+        if (current && current.orderStatus !== 'ordered') handleToggleSelect(current.id);
       } else if (e.key === 'Enter' || e.key === 'F2') {
         e.preventDefault();
-        const current = sortedProducts[focusedRowIndex];
-        if (current) {
+        const current = paginatedProducts[focusedRowIndex];
+        if (current && current.orderStatus !== 'ordered') {
           setEditingSku(current.sku);
           setEditQtyValue(String(current.orderQty));
           setIsUnsaved(false);
@@ -460,13 +1099,16 @@ export default function ReplenishmentPage() {
         setFocusedRowIndex(0);
       } else if (e.key === 'End') {
         e.preventDefault();
-        setFocusedRowIndex(sortedProducts.length - 1);
+        setFocusedRowIndex(paginatedProducts.length - 1);
       }
     };
+  });
 
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [sortedProducts, focusedRowIndex, editingSku, isUnsaved, showUnsavedModal, stateDropdownOpen]);
+  useEffect(() => {
+    const handleKeyDown = (e) => handleGlobalKeyDownRef.current?.(e);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Auto-scroll table into view when focused row changes via keyboard navigation
   useEffect(() => {
@@ -488,249 +1130,78 @@ export default function ReplenishmentPage() {
         rowEl.focus({ preventScroll: true });
       }
     }
-  }, [editingSku]);
+  }, [editingSku, focusedRowIndex]);
 
-  // Group products by priority
-  const criticalItems = sortedProducts.filter((p) => p.priority === 'critical');
-  const lowItems = sortedProducts.filter((p) => p.priority === 'low');
-  const healthyItems = sortedProducts.filter((p) => p.priority === 'healthy');
+  // ── Quick Action Modal Openers ──────────────────────────────────────────────
 
-  // Selected items calculations
-  const selectedItems = useMemo(() => {
-    return supplierProducts.filter((p) => p.selected && p.orderQty > 0);
-  }, [supplierProducts]);
-
-  const totalSelectedUnits = useMemo(() => {
-    return selectedItems.reduce((acc, p) => acc + p.orderQty, 0);
-  }, [selectedItems]);
-
-  const totalSelectedAmount = useMemo(() => {
-    return selectedItems.reduce((acc, p) => acc + p.orderQty * p.unitCost, 0);
-  }, [selectedItems]);
-
-  const allSelected = useMemo(() => {
-    return supplierProducts.length > 0 && supplierProducts.every((p) => p.selected);
-  }, [supplierProducts]);
-
-  const someSelected = useMemo(() => {
-    return supplierProducts.some((p) => p.selected) && !allSelected;
-  }, [supplierProducts, allSelected]);
-
-  // Handler: Select all toggle
-  const handleToggleSelectAll = () => {
-    const nextVal = !allSelected;
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.supplierId === selectedSupplierId) {
-          return {
-            ...p,
-            selected: nextVal,
-            orderQty: nextVal && p.orderQty === 0 ? Math.max(0, p.safetyTarget - p.currentStock) : p.orderQty,
-          };
-        }
-        return p;
-      })
-    );
-  };
-
-  // Handler: Individual select toggle
-  const handleToggleSelect = (id) => {
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.id === id) {
-          const nextSelected = !p.selected;
-          let nextQty = p.orderQty;
-          if (nextSelected && p.orderQty === 0) {
-            nextQty = Math.max(0, p.safetyTarget - p.currentStock);
-          }
-          return { ...p, selected: nextSelected, orderQty: nextQty };
-        }
-        return p;
-      })
-    );
-  };
-
-  // Handler: Save inline quantity edit
-  const handleSaveInlineQty = (sku) => {
-    const parsed = parseInt(editQtyValue, 10);
-    const validQty = isNaN(parsed) || parsed < 0 ? 0 : parsed;
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.sku === sku) {
-          return {
-            ...p,
-            orderQty: validQty,
-            selected: validQty > 0,
-          };
-        }
-        return p;
-      })
-    );
-    setEditingSku(null);
-    setIsUnsaved(false);
-    showToast(`Updated quantity for ${sku} to ${validQty} units.`);
-  };
-
-  const handleCancelInlineQty = () => {
-    const currentProd = products.find((p) => p.sku === editingSku);
-    const originalVal = currentProd ? String(currentProd.orderQty) : '';
-    // If not modified or unchanged, just close inline edit immediately without prompt
-    if (!isUnsaved || editQtyValue === originalVal) {
-      setEditingSku(null);
-      setIsUnsaved(false);
-      return;
+  const handleOpenManifests = async () => {
+    try {
+      const data = await fetchPendingManifests(selectedSupplierId);
+      setManifestsList(data || []);
+      setManifestsModalOpen(true);
+    } catch {
+      showToast('Failed to load pending manifests.', 'warn');
     }
-    requestActionWithUnsavedCheck(() => {
-      confirmDiscardUnsaved();
-    });
   };
 
-  // Handler: Apply Supplier Minimums
-  const handleApplySupplierMinimums = () => {
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.supplierId === selectedSupplierId) {
-          const deficit = Math.max(0, p.safetyTarget - p.currentStock);
-          return {
-            ...p,
-            selected: deficit > 0,
-            orderQty: deficit,
-          };
-        }
-        return p;
-      })
-    );
-    showToast(`Applied safety thresholds for ${currentSupplier.name}`);
-  };
-
-  // Handler: Approve Batch
-  const handleApproveBatch = () => {
-    if (selectedItems.length === 0) {
-      showToast('No items currently selected to approve.', 'warn');
-      return;
+  const handleOpenPOHistory = async () => {
+    try {
+      const data = await fetchPOHistory(selectedSupplierId);
+      setPoHistoryList(data || []);
+      setPoHistoryModalOpen(true);
+    } catch {
+      showToast('Failed to load purchase order history.', 'warn');
     }
-    showToast(`Batch approved! ${selectedItems.length} SKUs ready in PO Draft.`);
   };
 
-  // Handler: Submit PO
-  const handleSubmitPO = () => {
-    if (selectedItems.length === 0) {
-      showToast('Cannot submit empty PO. Select products first.', 'warn');
-      return;
+  const handleOpenContact = async () => {
+    try {
+      const data = await fetchSupplierContact(selectedSupplierId);
+      setContactData(data);
+      setContactModalOpen(true);
+    } catch {
+      showToast('Failed to load supplier contact details.', 'warn');
     }
-    showToast(`PO #PO-2026-104 for ${currentSupplier.name} (${formatCurrency(totalSelectedAmount)}) submitted successfully!`);
-  };
-
-  // Handler: Save Draft
-  const handleSaveDraft = () => {
-    showToast(`Draft #PO-2026-104 saved.`);
   };
 
   return (
-    <div className="rp" data-theme={theme}>
+    <div className="rp">
       {/* ─── Top Bar ──────────────────────────────────────────────────────── */}
       <header className="topbar">
         <div className="topbar-brand">
-          <div className="brand-logo" aria-hidden="true">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#0f172a" />
-              <path d="M2 17L12 22L22 17V7L12 12L2 7V17Z" fill="#2563eb" fillOpacity="0.85" />
-            </svg>
-          </div>
+          <span className="brand-logo" aria-hidden="true">
+            <img src={mainLogo} alt="StockDesk" className="site-main-logo" />
+          </span>
           <span className="brand-name">StockDesk</span>
           <span className="brand-sep">/</span>
           <span className="brand-page">Replenishment Desk</span>
         </div>
 
+        {/* Global Search Bar */}
         <div className="topbar-search">
-          <div className="search-wrap" role="search">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
+          <div className="search-box">
+            <span className="search-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="m21 21-4.3-4.3"/>
+              </svg>
+            </span>
             <input
               ref={searchInputRef}
               type="text"
-              className="search-input"
+              className="search-inp"
               placeholder="Search SKU, item name, supplier..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              aria-label="Search items or supplier"
+              aria-label="Search replenishment catalog"
             />
-            <kbd className="search-kbd">Ctrl+K</kbd>
+            <span className="search-badge">Ctrl+K</span>
           </div>
         </div>
 
         <div className="topbar-right">
-          {/* Theme switcher */}
-          <div className="theme-toggle" role="group" aria-label="Color theme switcher">
-            <button
-              className={`theme-btn ${theme === 'light' ? 'active' : ''}`}
-              onClick={() => setTheme('light')}
-            >
-              Light
-            </button>
-            <button
-              className={`theme-btn ${theme === 'dark' ? 'active' : ''}`}
-              onClick={() => setTheme('dark')}
-            >
-              Dark
-            </button>
-            <button
-              className={`theme-btn ${theme === 'system' ? 'active' : ''}`}
-              onClick={() => setTheme('system')}
-            >
-              System
-            </button>
-          </div>
-
-          {/* State switcher dropdown */}
-          <div className="state-dropdown-wrap" style={{ position: 'relative' }}>
-            <button
-              className="state-btn"
-              onClick={() => setStateDropdownOpen((prev) => !prev)}
-              aria-haspopup="true"
-              aria-expanded={stateDropdownOpen}
-              aria-label="Simulate application state"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M10 2v7.31L4.69 16A4 4 0 0 0 7.8 22h8.4a4 4 0 0 0 3.11-6L14 9.31V2"></path>
-                <line x1="8" y1="2" x2="16" y2="2"></line>
-              </svg>
-              <span>State: {appState === 'no_results' ? 'No Results' : appState.charAt(0).toUpperCase() + appState.slice(1)}</span>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="m6 9 6 6 6-6"/>
-              </svg>
-            </button>
-            {stateDropdownOpen && (
-              <div className="state-menu" role="menu">
-                {[
-                  { id: 'default', label: 'Default', color: '#2563eb' },
-                  { id: 'loading', label: 'Loading', color: '#f59e0b' },
-                  { id: 'empty', label: 'Empty (No Reorders)', color: '#64748b' },
-                  { id: 'no_results', label: 'No Results (Filter)', color: '#ea580c' },
-                  { id: 'error', label: 'Error (API Down)', color: '#dc2626' },
-                ].map((st) => (
-                  <button
-                    key={st.id}
-                    className={`state-item ${appState === st.id ? 'active' : ''}`}
-                    onClick={() => {
-                      setAppState(st.id);
-                      setStateDropdownOpen(false);
-                    }}
-                    role="menuitem"
-                  >
-                    <span className="state-dot" style={{ background: st.color }}></span>
-                    <span className="state-label">{st.label}</span>
-                    {appState === st.id && <span className="state-check">✓</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* User profile */}
-          <button className="user-btn" aria-label="User profile">
+          <button className="user-btn">
             <div className="user-av">SM</div>
             <div className="user-info">
               <span className="user-name">Store Manager</span>
@@ -740,27 +1211,28 @@ export default function ReplenishmentPage() {
         </div>
       </header>
 
-      {/* ─── Main 4-Column Layout ─────────────────────────────────────────── */}
-      <div className="rp-body">
-        {/* Col 1: Icon Navigation Bar */}
-        <nav className="icon-nav" aria-label="Main Navigation">
+      {/* ─── Main Workspace: 4-Column Layout with Smooth Side Animation ─── */}
+      <div className="rp-body" style={{ gridTemplateColumns: gridColumns }}>
+        {/* Col 1: Icon Navigation Rail */}
+        <nav className="icon-nav" aria-label="Main navigation rail">
           <div className="icon-nav-list">
             <button className="icon-nav-btn" title="Dashboard">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                <polyline points="9 22 9 12 15 12 15 22"/>
               </svg>
             </button>
             <button className="icon-nav-btn" title="Inventory">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect width="20" height="14" x="2" y="7" rx="2" ry="2"/>
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
                 <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
               </svg>
             </button>
             <button className="icon-nav-btn active" title="Replenishment Desk">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
               </svg>
             </button>
             <button className="icon-nav-btn" title="Suppliers">
@@ -778,6 +1250,8 @@ export default function ReplenishmentPage() {
                 <line x1="6" y1="20" x2="6" y2="14"/>
               </svg>
             </button>
+          </div>
+          <div className="icon-nav-bottom">
             <button className="icon-nav-btn" title="Settings">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="3"/>
@@ -785,37 +1259,62 @@ export default function ReplenishmentPage() {
               </svg>
             </button>
           </div>
-          <div className="icon-nav-bottom">
-            <div className="nav-av-sm">SM</div>
-          </div>
         </nav>
 
-        {/* Col 2: Supplier Queue Manifests */}
-        <aside className="sq" aria-label="Supplier Queue Manifests">
-          <div className="sq-head">
-            <div className="sq-head-l">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="1" y="3" width="15" height="13"/>
-                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
-                <circle cx="5.5" cy="18.5" r="2.5"/>
-                <circle cx="18.5" cy="18.5" r="2.5"/>
-              </svg>
-              <h2 className="sq-title">
-                Supplier Queue Manifests <span className="sq-badge-count">(4)</span>
-              </h2>
-            </div>
-            <button className="sq-collapse" title="Collapse queue">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="m18 15-6-6-6 6"/>
-              </svg>
+        {/* Col 2: Supplier Queue Sidebar (Left Side of Table) */}
+        <aside
+          id="collapse-supplier-queue"
+          className={`sq collapse-horizontal ${!sqExpanded ? 'is-collapsed' : ''}`}
+          aria-label="Supplier Queue"
+        >
+          <div
+            className="collapsed-rail"
+            onClick={() => setSqExpanded(true)}
+            title="Click to expand Supplier Queue"
+          >
+            <button
+              id="btn-expand-sq"
+              className="collapsed-rail-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSqExpanded(true);
+              }}
+              aria-label="Expand Supplier Queue"
+              aria-expanded={sqExpanded}
+            >
+              »
             </button>
+            <img src={queueLogo} alt="" className="rail-queue-logo" />
+            <span className="collapsed-rail-txt">
+              Supplier Queue ({activeQueueSuppliers.length})
+            </span>
           </div>
 
-          <div className="sq-cards">
-            {INITIAL_SUPPLIERS.map((sup) => {
-              const isActive = selectedSupplierId === sup.id;
-              // Specific data matching the screenshot
-              if (sup.id === 'hf') {
+          <div className="collapse-horizontal-inner">
+            <div className="sq-head">
+              <div className="sq-head-l" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <img src={queueLogo} alt="" className="section-queue-logo" />
+                <span>Supplier Queue</span>
+                <span className="sq-cnt">Relevant ({activeQueueSuppliers.length})</span>
+              </div>
+              <button
+                id="btn-collapse-sq"
+                className="sec-toggle-btn"
+                onClick={() => setSqExpanded(false)}
+                aria-label="Collapse Supplier Queue"
+                title="Collapse Supplier Queue"
+                aria-expanded={sqExpanded}
+              >
+                «
+              </button>
+            </div>
+
+            <div className="sq-cards">
+              {activeQueueSuppliers.map((sup) => {
+                const isActive = sup.id === selectedSupplierId;
+                const supSelectedItems = products.filter((p) => p.supplierId === sup.id && p.selected && p.orderQty > 0 && p.orderStatus !== 'ordered');
+                const supValidation = validateSupplierMoq(sup, supSelectedItems);
+
                 return (
                   <div
                     key={sup.id}
@@ -826,15 +1325,19 @@ export default function ReplenishmentPage() {
                     aria-pressed={isActive}
                   >
                     <div className="sc-top">
-                      <div className="sc-av" style={{ background: sup.color }}>
-                        {sup.initials}
+                      <div className="sc-av" style={!SUPPLIER_LOGOS[sup.id] ? { background: sup.color } : undefined}>
+                        {SUPPLIER_LOGOS[sup.id] ? (
+                          <img src={SUPPLIER_LOGOS[sup.id]} alt={sup.name} />
+                        ) : (
+                          sup.initials
+                        )}
                       </div>
                       <div className="sc-info">
                         <span className="sc-name">{sup.name}</span>
                         <span className="sc-cat">{sup.category}</span>
                       </div>
                       {sup.badge && (
-                        <span className="sc-badge preferred">{sup.badge}</span>
+                        <span className={`sc-badge ${sup.badgeType || 'preferred'}`}>{sup.badge}</span>
                       )}
                       <div className="sc-chev">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -843,845 +1346,973 @@ export default function ReplenishmentPage() {
                       </div>
                     </div>
 
-                    <div className="sc-bar">
-                      <div className="sc-bar-fill green" style={{ width: '100%' }}></div>
-                    </div>
-
-                    <div className="sc-amount ok">
-                      ₹14,250 <span className="sc-min">/ ₹10,000 (MOQ Met)</span>
-                    </div>
-
-                    <div className="sc-meta">
-                      <span className="sc-meta-item">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                        </svg>
-                        3 items Pending
-                      </span>
-                      <span className="sc-meta-item">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                          <line x1="16" y1="2" x2="16" y2="6"/>
-                          <line x1="8" y1="2" x2="8" y2="6"/>
-                          <line x1="3" y1="10" x2="21" y2="10"/>
-                        </svg>
-                        Lead Time: 2d
-                      </span>
-                    </div>
+                    {supSelectedItems.length === 0 ? (
+                      <div className="sc-meta" style={{ marginTop: 8 }}>
+                        <span className="sc-meta-item">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                            <line x1="3" y1="10" x2="21" y2="10"/>
+                          </svg>
+                          Lead Time: {sup.leadTime}
+                        </span>
+                        <span className="sc-meta-item">
+                          MOQ: {formatCurrency(sup.targetMoq)}
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="sc-bar">
+                          <div
+                            className={`sc-bar-fill ${supValidation.isMoqMet ? 'green' : 'amber'}`}
+                            style={{ width: `${Math.min(100, Math.round((supValidation.subtotal / (sup.targetMoq || 1)) * 100))}%` }}
+                          ></div>
+                        </div>
+                        <div className="sc-val">
+                          <span className="sc-curr">{formatCurrency(supValidation.subtotal)}</span>
+                          <span className="sc-target">
+                            / {formatCurrency(sup.targetMoq)} {supValidation.isMoqMet ? '(MOQ Met)' : `(${formatCurrency(supValidation.remainingAmount)} remaining)`}
+                          </span>
+                        </div>
+                        <div className="sc-meta">
+                          <span className="sc-meta-item">
+                            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: supValidation.isMoqMet ? '#10b981' : '#d97706' }}></span>
+                            {supSelectedItems.length} items Selected
+                          </span>
+                          <span className="sc-meta-item">
+                            Lead Time: {sup.leadTime}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 );
-              }
+              })}
+            </div>
 
-              if (sup.id === 'bi') {
-                return (
-                  <div
-                    key={sup.id}
-                    className={`sc ${isActive ? 'active' : ''}`}
-                    onClick={() => requestActionWithUnsavedCheck(() => setSelectedSupplierId(sup.id))}
-                    tabIndex={0}
-                    role="button"
-                    aria-pressed={isActive}
-                  >
-                    <div className="sc-top">
-                      <div className="sc-av" style={{ background: '#dc2626' }}>
-                        BI
-                      </div>
-                      <div className="sc-info">
-                        <span className="sc-name">{sup.name}</span>
-                        <span className="sc-cat">{sup.category}</span>
-                      </div>
-                      <div className="sc-chev">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="9 18 15 12 9 6"/>
-                        </svg>
-                      </div>
-                    </div>
-
-                    <div className="sc-bar">
-                      <div className="sc-bar-fill orange" style={{ width: '52.5%' }}></div>
-                    </div>
-
-                    <div className="sc-amount warn">
-                      ₹4,200 <span className="sc-min">/ ₹8,000 (Below MOQ)</span>
-                    </div>
-
-                    <div className="sc-meta">
-                      <span className="sc-meta-item" style={{ color: '#d97706' }}>
-                        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#d97706' }}></span>
-                        5 Items Pending
-                      </span>
-                      <span className="sc-meta-item">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                        </svg>
-                        Lead Time: 4d
-                      </span>
-                    </div>
-                  </div>
-                );
-              }
-
-              // Nature's Farm
-              return (
-                <div
-                  key={sup.id}
-                  className={`sc ${isActive ? 'active' : ''}`}
-                  onClick={() => requestActionWithUnsavedCheck(() => setSelectedSupplierId(sup.id))}
-                  tabIndex={0}
-                  role="button"
-                  aria-pressed={isActive}
-                >
-                  <div className="sc-top">
-                    <div className="sc-av" style={{ background: '#16a34a' }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
-                        <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
-                      </svg>
-                    </div>
-                    <div className="sc-info">
-                      <span className="sc-name">{sup.name}</span>
-                      <span className="sc-cat">{sup.category}</span>
-                    </div>
-                    <span className="sc-badge healthy">Healthy</span>
-                    <div className="sc-chev">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="9 18 15 12 9 6"/>
-                      </svg>
-                    </div>
-                  </div>
-
-                  <div className="sc-bar">
-                    <div className="sc-bar-fill green" style={{ width: '100%' }}></div>
-                  </div>
-
-                  <div className="sc-healthy-msg">
-                    All <strong>Healthy</strong> (0 reorders)
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Quick Actions */}
-          <div className="sq-qa">
-            <div className="sq-qa-title">Quick Actions</div>
-            <button className="sq-qa-btn" onClick={() => showToast('Create Manual PO dialog opened.')}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="12" y1="18" x2="12" y2="12"/>
-                <line x1="9" y1="15" x2="15" y2="15"/>
-              </svg>
-              <span>Create PO</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="9 18 15 12 9 6"/>
-              </svg>
-            </button>
-            <button className="sq-qa-btn" onClick={() => showToast('Navigating to pending manifests...')}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="8" y1="6" x2="21" y2="6"/>
-                <line x1="8" y1="12" x2="21" y2="12"/>
-                <line x1="8" y1="18" x2="21" y2="18"/>
-                <line x1="3" y1="6" x2="3.01" y2="6"/>
-                <line x1="3" y1="12" x2="3.01" y2="12"/>
-                <line x1="3" y1="18" x2="3.01" y2="18"/>
-              </svg>
-              <span>View pending manifests</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="9 18 15 12 9 6"/>
-              </svg>
-            </button>
+            {/* Quick Actions in Left Panel */}
+            <div className="sq-qa">
+              <div className="sq-qa-title">Quick Actions</div>
+              <button className="sq-qa-btn" onClick={handleOpenManifests}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="8" y1="6" x2="21" y2="6"/>
+                  <line x1="8" y1="12" x2="21" y2="12"/>
+                  <line x1="8" y1="18" x2="21" y2="18"/>
+                  <line x1="3" y1="6" x2="3.01" y2="6"/>
+                  <line x1="3" y1="12" x2="3.01" y2="12"/>
+                  <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                <span>View pending manifests</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </button>
+              <button className="sq-qa-btn" onClick={handleOpenPOHistory}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>PO history</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </button>
+              <button className="sq-qa-btn" onClick={handleOpenContact}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                </svg>
+                <span>Contact supplier</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </button>
+            </div>
           </div>
         </aside>
 
-        {/* Col 3: Replenishment Matrix (Center Table) */}
-        <main className="matrix" aria-label="Replenishment Matrix">
-          <div className="matrix-head">
-            <h1 className="matrix-title">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <line x1="3" y1="9" x2="21" y2="9"/>
-                <line x1="3" y1="15" x2="21" y2="15"/>
-                <line x1="9" y1="3" x2="9" y2="21"/>
-                <line x1="15" y1="3" x2="15" y2="21"/>
-              </svg>
-              Replenishment Matrix
-            </h1>
-          </div>
-
-          {/* Filter Bar */}
-          <div className="filter-bar">
-            <div className="filter-left">
-              <span className="filter-icon">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-                </svg>
-              </span>
-              <div className="filter-chip">
-                <span>Supplier: {currentSupplier.name}</span>
+        {/* Col 3: Center Replenishment Matrix */}
+        <main
+          className="matrix"
+          aria-label="Replenishment Matrix"
+        >
+          <div className="matrix-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h1 className="matrix-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <img src={matrixLogo} alt="" className="section-matrix-logo" />
+                  <span>Replenishment Matrix</span>
+                </h1>
+                <span className="matrix-badge-count">{displayProducts.length} Products</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button
-                  className="chip-rm"
-                  onClick={() => setSearchTerm('')}
-                  title="Clear filter"
+                  className="header-action-btn"
+                  onClick={() => setAddProductModalOpen(true)}
+                  title="Add new product to catalog"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
+                  <span>Add Product</span>
+                </button>
+                <button
+                  className="header-action-btn"
+                  onClick={() => setAddSupplierModalOpen(true)}
+                  title="Add new supplier to database"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <line x1="19" y1="8" x2="19" y2="14" />
+                    <line x1="22" y1="11" x2="16" y2="11" />
+                  </svg>
+                  <span>Add Supplier</span>
                 </button>
               </div>
             </div>
 
-            <div className="filter-right">
-              <label htmlFor="sort-select" className="sr-only">Sort matrix</label>
-              <span style={{ fontSize: 12, color: 'var(--text3)', marginRight: 6 }}>Sort:</span>
-              <select
-                id="sort-select"
-                className="sort-sel"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-              >
-                <option value="priority">Priority (Critical First)</option>
-                <option value="stock_low">Current Stock (Low to High)</option>
-                <option value="safety_target">Safety Target</option>
-                <option value="subtotal">Subtotal</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Toolbar */}
-          <div className="toolbar">
-            <button
-              className="toolbar-sel"
-              onClick={handleToggleSelectAll}
-              title="Toggle all rows"
-            >
-              <input
-                type="checkbox"
-                className="cb"
-                checked={allSelected}
-                ref={(el) => {
-                  if (el) el.indeterminate = someSelected;
-                }}
-                onChange={handleToggleSelectAll}
-              />
-              <span>{selectedItems.length} Items Selected</span>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="m6 9 6 6 6-6"/>
-              </svg>
-            </button>
-
-            <button
-              className="btn-primary"
-              onClick={handleApproveBatch}
-              disabled={selectedItems.length === 0}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="m22 2-7 20-4-9-9-4Z"/>
-                <path d="M22 2 11 13"/>
-              </svg>
-              <span>Approve Batch</span>
-            </button>
-
-            <button
-              className="btn-secondary"
-              onClick={handleApplySupplierMinimums}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              </svg>
-              <span>Apply Supplier Minimums</span>
-            </button>
-          </div>
-
-          {/* Conditional Views: Loading, Empty, No Results, Error, or Table */}
-          {appState === 'loading' && (
-            <div className="tbl-wrap">
-              <div className="skel-wrap">
-                {[1, 2, 3, 4, 5, 6, 7].map((idx) => (
-                  <div key={idx} className="skel-row">
-                    <div className="skel-cell skel-xs"></div>
-                    <div className="skel-cell skel-sm"></div>
-                    <div className="skel-cell skel-lg"></div>
-                    <div className="skel-cell skel-sm"></div>
-                    <div className="skel-cell skel-sm"></div>
-                    <div className="skel-cell skel-md"></div>
-                    <div className="skel-cell skel-sm"></div>
-                    <div className="skel-cell skel-md"></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {appState === 'empty' && (
-            <div className="state-box">
-              <div className="state-icon">📦</div>
-              <h3 className="state-title">No Replenishment Required</h3>
-              <p className="state-body">
-                All inventory across {currentSupplier.name} categories is at or above safety targets.
-              </p>
-              <button
-                className="retry-btn"
-                onClick={() => setAppState('default')}
-              >
-                Reset to Default View
-              </button>
-            </div>
-          )}
-
-          {appState === 'no_results' && (
-            <div className="state-box">
-              <div className="state-icon">🔍</div>
-              <h3 className="state-title">No Matching Replenishment Items</h3>
-              <p className="state-body">
-                No products match the applied search filter criteria. Clear filters to see full catalog.
-              </p>
-              <button
-                className="retry-btn"
-                onClick={() => {
-                  setSearchTerm('');
-                  setAppState('default');
-                }}
-              >
-                Clear Search & Reset
-              </button>
-            </div>
-          )}
-
-          {appState === 'error' && (
-            <div className="state-box">
-              <div className="state-icon">⚠️</div>
-              <h3 className="state-title">Unable to Load Replenishment Data</h3>
-              <p className="state-body">
-                Connection to JSON data store timed out. Check network or server configuration.
-              </p>
-              <button
-                className="retry-btn"
-                onClick={() => {
-                  setAppState('loading');
-                  setTimeout(() => setAppState('default'), 600);
-                }}
-              >
-                Retry Connection
-              </button>
-            </div>
-          )}
-
-          {appState === 'default' && (
-            <div className="tbl-wrap">
-              <table className="tbl" ref={tableRef} aria-label="Replenishment products table">
-                <thead>
-                  <tr>
-                    <th className="col-chk">
-                      <input
-                        type="checkbox"
-                        className="cb"
-                        checked={allSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = someSelected;
-                        }}
-                        onChange={handleToggleSelectAll}
-                        aria-label="Select all products"
-                      />
-                    </th>
-                    <th className="col-sku">SKU</th>
-                    <th className="col-name">Item Name</th>
-                    <th className="col-stk num">Current<br />Stock</th>
-                    <th className="col-tgt num">Safety<br />Target</th>
-                    <th className="col-st">Status</th>
-                    <th className="col-qty">Order Qty</th>
-                    <th className="col-sub num">Subtotal (₹)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* CRITICAL GROUP */}
-                  {criticalItems.length > 0 && (
-                    <>
-                      <tr className="pg-row">
-                        <td colSpan={8}>
-                          <div className="pg-hdr" style={{ background: 'var(--c-critical-bg)' }}>
-                            <span className="pg-dot dot-c">●</span>
-                            <span className="lbl-c">CRITICAL</span>
-                            <span className="pg-cnt">({criticalItems.length})</span>
-                          </div>
-                        </td>
-                      </tr>
-                      {criticalItems.map((prod) => {
-                        const lineSubtotal = prod.orderQty * prod.unitCost;
-                        const isEditingThis = editingSku === prod.sku;
-
-                        const globalIdx = globalRowIndices[prod.id];
-                        const isRowFocused = focusedRowIndex === globalIdx;
-
-                        return (
-                          <tr
-                            key={prod.id}
-                            data-row-index={globalIdx}
-                            className={`pr ${prod.selected ? 'sel' : ''} ${isRowFocused ? 'focused' : ''}`}
-                            tabIndex={0}
-                            onFocus={() => setFocusedRowIndex(globalIdx)}
-                            onClick={() => setFocusedRowIndex(globalIdx)}
-                          >
-                            <td className="col-chk">
-                              <input
-                                type="checkbox"
-                                className="cb"
-                                checked={prod.selected}
-                                onChange={() => handleToggleSelect(prod.id)}
-                                aria-label={`Select ${prod.name}`}
-                              />
-                            </td>
-                            <td className="col-sku">
-                              <span className="sku-lbl">{prod.sku}</span>
-                            </td>
-                            <td className="col-name">
-                              <div className="prod-name">{prod.name}</div>
-                              <div className="prod-cat">{prod.category}</div>
-                            </td>
-                            <td className="col-stk">{prod.currentStock}</td>
-                            <td className="col-tgt">{prod.safetyTarget}</td>
-                            <td className="col-st">
-                              <span className="st-badge critical">
-                                <span className="st-dot"></span>
-                                Critical
-                              </span>
-                            </td>
-                            <td className="col-qty">
-                              {/* Row 1 / Fresh Milk has active editing state per screenshot */}
-                              {isEditingThis ? (
-                                <div className="qty-wrap">
-                                  <input
-                                    type="number"
-                                    className="qty-inp"
-                                    value={editQtyValue}
-                                    onChange={(e) => {
-                                      setEditQtyValue(e.target.value);
-                                      setIsUnsaved(true);
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') handleSaveInlineQty(prod.sku);
-                                      if (e.key === 'Escape') {
-                                        e.stopPropagation();
-                                        handleCancelInlineQty();
-                                      }
-                                    }}
-                                    autoFocus
-                                    aria-label="Order Quantity"
-                                  />
-                                  <div className="qty-actions">
-                                    {isUnsaved && <span className="qty-unsaved">Unsaved</span>}
-                                    <button
-                                      className="qty-save"
-                                      onClick={() => handleSaveInlineQty(prod.sku)}
-                                    >
-                                      ↵ Save
-                                    </button>
-                                    <span className="qty-sep">|</span>
-                                    <button
-                                      className="qty-cancel"
-                                      onClick={handleCancelInlineQty}
-                                    >
-                                      Esc Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button
-                                  className={`qty-disp ${prod.orderQty === 0 ? 'qty-zero' : ''}`}
-                                  onClick={() => {
-                                    setFocusedRowIndex(globalIdx);
-                                    setEditingSku(prod.sku);
-                                    setEditQtyValue(String(prod.orderQty));
-                                    setIsUnsaved(false);
-                                  }}
-                                  title="Click to edit quantity"
-                                >
-                                  {prod.orderQty}
-                                </button>
-                              )}
-                            </td>
-                            <td className="col-sub">
-                              {formatCurrency(lineSubtotal)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </>
+            {/* Filter Bar with Filter Modal Trigger */}
+            <div className="filter-bar">
+              <div className="filter-left">
+                <button
+                  className={`btn-filter-modal ${hasActiveFilters ? 'active' : ''}`}
+                  onClick={() => setFilterModalOpen(true)}
+                  aria-label="Open filter modal"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                  </svg>
+                  <span>Filter</span>
+                  {activeFilterCount > 0 && (
+                    <span className="filter-count-badge">{activeFilterCount}</span>
                   )}
-
-                  {/* LOW GROUP */}
-                  {lowItems.length > 0 && (
-                    <>
-                      <tr className="pg-row">
-                        <td colSpan={8}>
-                          <div className="pg-hdr" style={{ background: 'var(--c-low-bg)' }}>
-                            <span className="pg-dot dot-l">●</span>
-                            <span className="lbl-l">LOW</span>
-                            <span className="pg-cnt">({lowItems.length})</span>
-                          </div>
-                        </td>
-                      </tr>
-                      {lowItems.map((prod) => {
-                        const lineSubtotal = prod.orderQty * prod.unitCost;
-                        const isEditingThis = editingSku === prod.sku;
-
-                        const globalIdx = globalRowIndices[prod.id];
-                        const isRowFocused = focusedRowIndex === globalIdx;
-
-                        return (
-                          <tr
-                            key={prod.id}
-                            data-row-index={globalIdx}
-                            className={`pr ${prod.selected ? 'sel' : ''} ${isRowFocused ? 'focused' : ''}`}
-                            tabIndex={0}
-                            onFocus={() => setFocusedRowIndex(globalIdx)}
-                            onClick={() => setFocusedRowIndex(globalIdx)}
-                          >
-                            <td className="col-chk">
-                              <input
-                                type="checkbox"
-                                className="cb"
-                                checked={prod.selected}
-                                onChange={() => handleToggleSelect(prod.id)}
-                                aria-label={`Select ${prod.name}`}
-                              />
-                            </td>
-                            <td className="col-sku">
-                              <span className="sku-lbl">{prod.sku}</span>
-                            </td>
-                            <td className="col-name">
-                              <div className="prod-name">{prod.name}</div>
-                              <div className="prod-cat">{prod.category}</div>
-                            </td>
-                            <td className="col-stk">{prod.currentStock}</td>
-                            <td className="col-tgt">{prod.safetyTarget}</td>
-                            <td className="col-st">
-                              <span className="st-badge low">
-                                <span className="st-dot"></span>
-                                Low
-                              </span>
-                            </td>
-                            <td className="col-qty">
-                              {isEditingThis ? (
-                                <div className="qty-wrap">
-                                  <input
-                                    type="number"
-                                    className="qty-inp"
-                                    value={editQtyValue}
-                                    onChange={(e) => {
-                                      setEditQtyValue(e.target.value);
-                                      setIsUnsaved(true);
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') handleSaveInlineQty(prod.sku);
-                                      if (e.key === 'Escape') {
-                                        e.stopPropagation();
-                                        handleCancelInlineQty();
-                                      }
-                                    }}
-                                    autoFocus
-                                    aria-label="Order Quantity"
-                                  />
-                                  <div className="qty-actions">
-                                    {isUnsaved && <span className="qty-unsaved">Unsaved</span>}
-                                    <button
-                                      className="qty-save"
-                                      onClick={() => handleSaveInlineQty(prod.sku)}
-                                    >
-                                      ↵ Save
-                                    </button>
-                                    <span className="qty-sep">|</span>
-                                    <button
-                                      className="qty-cancel"
-                                      onClick={handleCancelInlineQty}
-                                    >
-                                      Esc Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button
-                                  className={`qty-disp ${prod.orderQty === 0 ? 'qty-zero' : ''}`}
-                                  onClick={() => {
-                                    setFocusedRowIndex(globalIdx);
-                                    setEditingSku(prod.sku);
-                                    setEditQtyValue(String(prod.orderQty));
-                                    setIsUnsaved(false);
-                                  }}
-                                  title="Click to edit quantity"
-                                >
-                                  {prod.orderQty}
-                                </button>
-                              )}
-                            </td>
-                            <td className="col-sub">
-                              {formatCurrency(lineSubtotal)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </>
-                  )}
-
-                  {/* HEALTHY GROUP */}
-                  {healthyItems.length > 0 && (
-                    <>
-                      <tr className="pg-row">
-                        <td colSpan={8}>
-                          <div className="pg-hdr" style={{ background: 'var(--c-healthy-bg)' }}>
-                            <span className="pg-dot dot-h">●</span>
-                            <span className="lbl-h">HEALTHY</span>
-                            <span className="pg-cnt">({healthyItems.length})</span>
-                          </div>
-                        </td>
-                      </tr>
-                      {healthyItems.map((prod) => {
-                        const lineSubtotal = prod.orderQty * prod.unitCost;
-                        const isEditingThis = editingSku === prod.sku;
-
-                        const globalIdx = globalRowIndices[prod.id];
-                        const isRowFocused = focusedRowIndex === globalIdx;
-
-                        return (
-                          <tr
-                            key={prod.id}
-                            data-row-index={globalIdx}
-                            className={`pr ${prod.selected ? 'sel' : ''} ${isRowFocused ? 'focused' : ''}`}
-                            tabIndex={0}
-                            onFocus={() => setFocusedRowIndex(globalIdx)}
-                            onClick={() => setFocusedRowIndex(globalIdx)}
-                          >
-                            <td className="col-chk">
-                              <input
-                                type="checkbox"
-                                className="cb"
-                                checked={prod.selected}
-                                onChange={() => handleToggleSelect(prod.id)}
-                                aria-label={`Select ${prod.name}`}
-                              />
-                            </td>
-                            <td className="col-sku">
-                              <span className="sku-lbl">{prod.sku}</span>
-                            </td>
-                            <td className="col-name">
-                              <div className="prod-name">{prod.name}</div>
-                              <div className="prod-cat">{prod.category}</div>
-                            </td>
-                            <td className="col-stk">{prod.currentStock}</td>
-                            <td className="col-tgt">{prod.safetyTarget}</td>
-                            <td className="col-st">
-                              <span className="st-badge healthy">
-                                <span className="st-dot"></span>
-                                Healthy
-                              </span>
-                            </td>
-                            <td className="col-qty">
-                              {isEditingThis ? (
-                                <div className="qty-wrap">
-                                  <input
-                                    type="number"
-                                    className="qty-inp"
-                                    value={editQtyValue}
-                                    onChange={(e) => {
-                                      setEditQtyValue(e.target.value);
-                                      setIsUnsaved(true);
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') handleSaveInlineQty(prod.sku);
-                                      if (e.key === 'Escape') {
-                                        e.stopPropagation();
-                                        handleCancelInlineQty();
-                                      }
-                                    }}
-                                    autoFocus
-                                    aria-label="Order Quantity"
-                                  />
-                                  <div className="qty-actions">
-                                    {isUnsaved && <span className="qty-unsaved">Unsaved</span>}
-                                    <button
-                                      className="qty-save"
-                                      onClick={() => handleSaveInlineQty(prod.sku)}
-                                    >
-                                      ↵ Save
-                                    </button>
-                                    <span className="qty-sep">|</span>
-                                    <button
-                                      className="qty-cancel"
-                                      onClick={handleCancelInlineQty}
-                                    >
-                                      Esc Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button
-                                  className={`qty-disp ${prod.orderQty === 0 ? 'qty-zero' : ''}`}
-                                  onClick={() => {
-                                    setFocusedRowIndex(globalIdx);
-                                    setEditingSku(prod.sku);
-                                    setEditQtyValue(String(prod.orderQty));
-                                    setIsUnsaved(false);
-                                  }}
-                                  title="Click to edit quantity"
-                                >
-                                  {prod.orderQty}
-                                </button>
-                              )}
-                            </td>
-                            <td className="col-sub">
-                              {formatCurrency(lineSubtotal)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Pagination Footer */}
-          <div className="pager">
-            <span className="pager-info">
-              Showing 1–{filteredProducts.length} of {filteredProducts.length} items
-            </span>
-            <div className="pager-ctrl">
-              <button className="pager-btn" disabled title="Previous page">
-                ‹
-              </button>
-              <button className="pager-btn cur">1</button>
-              <button className="pager-btn" disabled title="Next page">
-                ›
-              </button>
-            </div>
-          </div>
-        </main>
-
-        {/* Col 4: Purchase Order Draft Panel */}
-        <aside className="po" aria-label="Purchase Order Draft">
-          <div className="po-head">
-            <div className="po-head-l">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-              </svg>
-              <h2 className="po-title">PO Draft #PO-2026-104</h2>
-            </div>
-            <button className="po-more" title="More options">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="1"/>
-                <circle cx="12" cy="5" r="1"/>
-                <circle cx="12" cy="19" r="1"/>
-              </svg>
-            </button>
-          </div>
-
-          {/* Section: Supplier Information */}
-          <div className="po-sec">
-            <div className="po-sec-title">Supplier Information</div>
-            <div className="po-sup-row">
-              <div className="po-sup-av" style={{ background: currentSupplier.color }}>
-                {currentSupplier.initials}
-              </div>
-              <div>
-                <div className="po-sup-name">{currentSupplier.name}</div>
-                <div className="po-sup-cat">{currentSupplier.category}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section: Minimum Threshold Checklist */}
-          <div className="po-sec">
-            <div className="po-sec-title">Minimum Threshold Checklist</div>
-            <div className="po-checklist">
-              <div className="po-check">
-                <span className={`po-check-ic ${totalSelectedAmount >= currentSupplier.targetMoq ? 'pass' : 'fail'}`}>
-                  {totalSelectedAmount >= currentSupplier.targetMoq ? '✔' : '✖'}
-                </span>
-                <span>
-                  Order value {formatCurrency(totalSelectedAmount)} {totalSelectedAmount >= currentSupplier.targetMoq ? 'exceeds' : 'below'} {formatCurrency(currentSupplier.targetMoq)} minimum
-                </span>
-              </div>
-              <div className="po-check">
-                <span className={`po-check-ic ${totalSelectedUnits >= currentSupplier.unitThreshold ? 'pass' : 'fail'}`}>
-                  {totalSelectedUnits >= currentSupplier.unitThreshold ? '✔' : '✖'}
-                </span>
-                <span>
-                  Order units ({totalSelectedUnits} units) {totalSelectedUnits >= currentSupplier.unitThreshold ? 'exceeds' : 'below'} {currentSupplier.unitThreshold} unit freight threshold
+                </button>
+                {hasActiveFilters && (
+                  <button
+                    className="btn-clear-filters"
+                    onClick={() => setAppliedFilters({ statuses: [], suppliers: [], categories: [], stockLevels: [], search: '' })}
+                    title="Clear applied filters"
+                  >
+                    Clear filters
+                  </button>
+                )}
+                <span className="filter-res-txt">
+                  Showing {displayProducts.length} of {products.length} products
                 </span>
               </div>
             </div>
-          </div>
 
-          {/* Section: Financial Summary */}
-          <div className="po-sec">
-            <div className="po-sec-title">Financial Summary</div>
-            <div className="po-fin">
-              <div className="po-fin-row">
-                <span className="lbl">Subtotal ({selectedItems.length} SKUs)</span>
-                <span className="val">{formatCurrency(totalSelectedAmount)}</span>
+            {/* Toolbar & Bulk Action Bar */}
+            <div className="toolbar">
+              <div className="toolbar-selection-group">
+                <button
+                  className="toolbar-sel"
+                  onClick={handleToggleSelectPage}
+                  title={`Toggle selection for current page (${eligiblePageProducts.length} items)`}
+                >
+                  <input
+                    type="checkbox"
+                    className="cb"
+                    checked={isPageAllSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = isPageSomeSelected;
+                    }}
+                    onChange={handleToggleSelectPage}
+                    aria-label="Select visible page products"
+                  />
+                  <span>Select Page ({eligiblePageProducts.filter((p) => p.selected).length}/{eligiblePageProducts.length})</span>
+                </button>
+
+                {eligibleFilteredProducts.length > eligiblePageProducts.length && (
+                  <button
+                    className={`btn-toolbar-scope ${isAllFilteredSelected ? 'active' : ''}`}
+                    onClick={isAllFilteredSelected ? handleClearAllSelections : handleSelectAllFiltered}
+                    title="Select all filtered results across all pages"
+                  >
+                    {isAllFilteredSelected ? 'Deselect All Filtered' : `Select All Results (${eligibleFilteredProducts.length})`}
+                  </button>
+                )}
               </div>
-              <div className="po-fin-row">
-                <span className="lbl">GST / Tax</span>
-                <span className="incl">Included</span>
-              </div>
-              <div className="po-fin-row po-fin-total">
-                <span className="lbl">Total PO Amount</span>
-                <span className="val">{formatCurrency(totalSelectedAmount)}</span>
-              </div>
+
+              {selectedProducts.length > 0 ? (
+                <div className="bulk-toolbar">
+                  <span className="bulk-count">
+                    {selectedProducts.length} product{selectedProducts.length > 1 ? 's' : ''} selected
+                  </span>
+                  <button
+                    className="btn-bulk-edit"
+                    onClick={() => setBulkEditModalOpen(true)}
+                    title="Bulk edit selected products"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    <span>Bulk Edit</span>
+                  </button>
+                  <button
+                    className="btn-bulk-cancel"
+                    onClick={handleClearAllSelections}
+                    title="Cancel selection"
+                  >
+                    Cancel Selection
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="btn-secondary"
+                    onClick={handleApplySupplierMinimums}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <span>Apply Supplier Minimums</span>
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
 
-          {/* Section: Order Breakdown */}
-          <div className="po-sec" style={{ flex: 1 }}>
-            <div className="po-sec-title">Order Breakdown</div>
-            {selectedItems.length === 0 ? (
-              <div className="po-empty">
-                <div className="po-empty-icon">📋</div>
-                <div className="po-empty-txt">No items selected for this order draft.</div>
-              </div>
-            ) : (
-              <div className="po-bk-list">
-                {selectedItems.map((item) => (
-                  <div key={item.id} className="po-bk-item">
-                    <span className="bk-name" title={item.name}>{item.name}</span>
-                    <span className="bk-units">{item.orderQty} units</span>
-                    <span className="bk-amt">{formatCurrency(item.orderQty * item.unitCost)}</span>
-                  </div>
-                ))}
+            {/* Selection Scope Banner: when all on current page are selected and more exist across pages */}
+            {isPageAllSelected && eligibleFilteredProducts.length > eligiblePageProducts.length && (
+              <div className="selection-scope-banner">
+                {!isAllFilteredSelected ? (
+                  <>
+                    <span>All <strong>{eligiblePageProducts.length}</strong> products on page {currentPage} are selected.</span>
+                    <button
+                      className="btn-link-action"
+                      onClick={handleSelectAllFiltered}
+                    >
+                      Select all {eligibleFilteredProducts.length} filtered products
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span>All <strong>{eligibleFilteredProducts.length}</strong> filtered products across all pages are selected.</span>
+                    <button
+                      className="btn-link-action"
+                      onClick={handleClearAllSelections}
+                    >
+                      Clear selection
+                    </button>
+                  </>
+                )}
               </div>
             )}
+
+            {/* Genuine Application States */}
+            {isLoading && (
+              <div className="tbl-wrap">
+                <div className="skel-wrap">
+                  {[1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                    <div key={idx} className="skel-row">
+                      <div className="skel-cell skel-xs"></div>
+                      <div className="skel-cell skel-sm"></div>
+                      <div className="skel-cell skel-lg"></div>
+                      <div className="skel-cell skel-sm"></div>
+                      <div className="skel-cell skel-sm"></div>
+                      <div className="skel-cell skel-md"></div>
+                      <div className="skel-cell skel-sm"></div>
+                      <div className="skel-cell skel-md"></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!isLoading && dbError && (
+              <div className="state-box">
+                <div className="state-icon">⚠️</div>
+                <h3 className="state-title">Unable to Load Replenishment Data</h3>
+                <p className="state-body">
+                  {dbError}. Failed to read data from SQLite storage.
+                </p>
+                <button
+                  className="retry-btn"
+                  onClick={loadSQLiteData}
+                >
+                  Retry Connection
+                </button>
+              </div>
+            )}
+
+            {!isLoading && !dbError && products.length === 0 && (
+              <div className="state-box">
+                <div className="state-icon">📦</div>
+                <h3 className="state-title">No Replenishment Required</h3>
+                <p className="state-body">
+                  No products currently available in the replenishment catalog.
+                </p>
+                <button
+                  className="retry-btn"
+                  onClick={() => setAddProductModalOpen(true)}
+                >
+                  Add First Product
+                </button>
+              </div>
+            )}
+
+            {!isLoading && !dbError && products.length > 0 && displayProducts.length === 0 && (
+              <div className="state-box">
+                <div className="state-icon">🔍</div>
+                <h3 className="state-title">No Matching Replenishment Items</h3>
+                <p className="state-body">
+                  No products match the applied search and filter criteria. Clear filters to see full catalog.
+                </p>
+                <button
+                  className="retry-btn"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setAppliedFilters({ statuses: [], suppliers: [], categories: [], stockLevels: [], search: '' });
+                  }}
+                >
+                  Clear Search &amp; Filters
+                </button>
+              </div>
+            )}
+
+            {!isLoading && !dbError && displayProducts.length > 0 && (
+              <div className="tbl-wrap">
+                <table className="tbl" ref={tableRef} aria-label="Replenishment products table">
+                  <thead>
+                    <tr>
+                      <th className="col-chk">
+                        <input
+                          type="checkbox"
+                          className="cb"
+                          checked={isPageAllSelected}
+                          ref={(el) => {
+                            if (el) el.indeterminate = isPageSomeSelected;
+                          }}
+                          onChange={handleToggleSelectPage}
+                          aria-label={`Select all eligible products on page ${currentPage}`}
+                          title={`Select all on page ${currentPage}`}
+                        />
+                      </th>
+                      <th className="col-id">Product ID</th>
+                      <th className="col-sku">SKU</th>
+                      <th className="col-name">Product Name</th>
+                      <th className="col-sup">Supplier</th>
+                      <th className="col-cat">Category</th>
+                      <th className="col-stk num">Stock</th>
+                      <th className="col-tgt num">Target</th>
+                      <th className="col-st">Status</th>
+                      <th className="col-qty">Order Qty</th>
+                      <th className="col-prc num">Unit Price</th>
+                      <th className="col-sub num">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedProducts.map((prod, pageIdx) => {
+                      const isOrdered = prod.orderStatus === 'ordered';
+                      const lineSubtotal = prod.orderQty * prod.unitCost;
+                      const isEditingThis = editingSku === prod.sku;
+                      const isRowFocused = focusedRowIndex === pageIdx;
+                      const sup = suppliersMap[prod.supplierId];
+
+                      const badgeType = isOrdered ? 'ordered' : prod.priority;
+                      const badgeLabel = isOrdered
+                        ? 'Ordered'
+                        : prod.priority.charAt(0).toUpperCase() + prod.priority.slice(1);
+
+                      return (
+                        <tr
+                          key={prod.id}
+                          data-row-index={pageIdx}
+                          className={`pr ${prod.selected && !isOrdered ? 'sel' : ''} ${isRowFocused ? 'focused' : ''} ${isOrdered ? 'is-ordered' : ''}`}
+                          tabIndex={isOrdered ? -1 : 0}
+                          onFocus={() => !isOrdered && setFocusedRowIndex(pageIdx)}
+                          onClick={() => !isOrdered && setFocusedRowIndex(pageIdx)}
+                        >
+                          <td className="col-chk">
+                            <input
+                              type="checkbox"
+                              className="cb"
+                              checked={prod.selected && !isOrdered}
+                              disabled={isOrdered}
+                              onChange={() => handleToggleSelect(prod.id)}
+                              aria-label={`Select ${prod.name}`}
+                            />
+                          </td>
+                          <td className="col-id">
+                            <span className="prod-id-code">{prod.id}</span>
+                          </td>
+                          <td className="col-sku">
+                            <span className="sku-lbl">{prod.sku}</span>
+                          </td>
+                          <td className="col-name">
+                            <div className="prod-name">{prod.name}</div>
+                          </td>
+                          <td className="col-sup">
+                            <div className="sup-cell-content">
+                              {SUPPLIER_LOGOS[prod.supplierId] && (
+                                <img
+                                  src={SUPPLIER_LOGOS[prod.supplierId]}
+                                  alt=""
+                                  className="sup-cell-logo"
+                                />
+                              )}
+                              <span className="sup-cell-name" title={sup?.name || prod.supplierId}>
+                                {sup?.name || prod.supplierId}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="col-cat">
+                            <span className="cat-cell-tag">{prod.category}</span>
+                          </td>
+                          <td className="col-stk">{prod.currentStock}</td>
+                          <td className="col-tgt">{prod.safetyTarget}</td>
+                          <td className="col-st">
+                            <span className={`st-badge ${badgeType}`}>
+                              <span className="st-dot"></span>
+                              {badgeLabel}
+                            </span>
+                          </td>
+                          <td className="col-qty">
+                            {isOrdered ? (
+                              <span className="qty-disp qty-ordered" title="Product already ordered">
+                                —
+                              </span>
+                            ) : isEditingThis ? (
+                              <div className="qty-wrap">
+                                <input
+                                  type="number"
+                                  className="qty-inp"
+                                  value={editQtyValue}
+                                  onChange={(e) => {
+                                    setEditQtyValue(e.target.value);
+                                    setIsUnsaved(true);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveInlineQty(prod.sku);
+                                    if (e.key === 'Escape') {
+                                      e.stopPropagation();
+                                      handleCancelInlineQty();
+                                    }
+                                  }}
+                                  autoFocus
+                                  aria-label="Order Quantity"
+                                />
+                                <div className="qty-actions">
+                                  {isUnsaved && <span className="qty-unsaved">Unsaved</span>}
+                                  <button
+                                    className="qty-save"
+                                    onClick={() => handleSaveInlineQty(prod.sku)}
+                                  >
+                                    ↵ Save
+                                  </button>
+                                  <span className="qty-sep">|</span>
+                                  <button
+                                    className="qty-cancel"
+                                    onClick={handleCancelInlineQty}
+                                  >
+                                    Esc Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                className={`qty-disp ${prod.orderQty === 0 ? 'qty-zero' : ''}`}
+                                onClick={() => {
+                                  setFocusedRowIndex(pageIdx);
+                                  setEditingSku(prod.sku);
+                                  setEditQtyValue(String(prod.orderQty));
+                                  setIsUnsaved(false);
+                                }}
+                                title="Click to edit quantity"
+                              >
+                                {prod.orderQty}
+                              </button>
+                            )}
+                          </td>
+                          <td className="col-prc">
+                            {formatCurrency(prod.unitCost)}
+                          </td>
+                          <td className="col-sub">
+                            {isOrdered ? '—' : formatCurrency(lineSubtotal)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination Footer */}
+            {!isLoading && !dbError && displayProducts.length > 0 && (
+              <div className="pager" role="navigation" aria-label="Table pagination">
+                <div className="pager-left">
+                  <span className="pager-info">
+                    Showing {totalItems === 0 ? 0 : startIndex + 1}–{endIndex} of {totalItems} products
+                  </span>
+                </div>
+                <div className="pager-right">
+                  <div className="pager-size-wrap">
+                    <label htmlFor="pager-page-size" className="pager-size-lbl">Rows per page:</label>
+                    <select
+                      id="pager-page-size"
+                      className="pager-size-select"
+                      value={pageSize}
+                      onChange={(e) => handlePageSizeChange(e.target.value)}
+                      aria-label="Products per page"
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </div>
+                  <div className="pager-nav">
+                    <button
+                      className="pager-btn pager-prev"
+                      disabled={currentPage <= 1}
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      aria-label="Previous page"
+                      title="Previous page"
+                    >
+                      &lt;
+                    </button>
+                    {pageNumbers.map((pNum, idx) => {
+                      if (pNum === '...') {
+                        return (
+                          <span key={`ellipsis-${idx}`} className="pager-ellipsis" aria-hidden="true">
+                            …
+                          </span>
+                        );
+                      }
+                      return (
+                        <button
+                          key={pNum}
+                          className={`pager-btn ${currentPage === pNum ? 'cur' : ''}`}
+                          onClick={() => handlePageChange(pNum)}
+                          aria-label={`Page ${pNum}`}
+                          aria-current={currentPage === pNum ? 'page' : undefined}
+                        >
+                          {pNum}
+                        </button>
+                      );
+                    })}
+                    <button
+                      className="pager-btn pager-next"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      aria-label="Next page"
+                      title="Next page"
+                    >
+                      &gt;
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+        </main>
+
+        {/* Col 4: Purchase Order Draft & Supplier Review Summary (Right Side of Table) */}
+        <aside
+          id="collapse-po-draft"
+          className={`po collapse-horizontal ${!draftExpanded ? 'is-collapsed' : ''}`}
+          aria-label="Purchase Order Draft & Supplier Review Summary"
+        >
+          <div
+            className="collapsed-rail"
+            onClick={() => setDraftExpanded(true)}
+            title="Click to expand Purchase Order Draft"
+          >
+            <button
+              id="btn-expand-draft"
+              className="collapsed-rail-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDraftExpanded(true);
+              }}
+              aria-label="Expand Purchase Order Draft"
+              aria-expanded={draftExpanded}
+            >
+              «
+            </button>
+            <img src={draftLogo} alt="" className="rail-draft-logo" />
+            <span className="collapsed-rail-txt">
+              PO Draft ({selectedItems.length})
+            </span>
           </div>
 
-          {/* Section: Actions */}
-          <div className="po-actions">
-            <button className="po-discard" onClick={handleDiscardChanges}>
-              Discard Changes
-            </button>
-            <button className="po-save" onClick={handleSaveDraft}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                <polyline points="17 21 17 13 7 13 7 21"/>
-                <polyline points="7 3 7 8 15 8"/>
-              </svg>
-              <span>Save Draft</span>
-            </button>
-            <button
-              className="po-approve"
-              onClick={handleSubmitPO}
-              disabled={selectedItems.length === 0}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="m22 2-7 20-4-9-9-4Z"/>
-                <path d="M22 2 11 13"/>
-              </svg>
-              <span>Approve &amp; Send PO →</span>
-            </button>
+          <div className="collapse-horizontal-inner">
+            <div className="po-head">
+              <div className="po-head-l" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <img src={draftLogo} alt="" className="section-draft-logo" />
+                <span className="po-title">PO Draft #{currentSupplier.id.toUpperCase()}-2026-DRAFT</span>
+              </div>
+              <button
+                id="btn-collapse-draft"
+                className="sec-toggle-btn"
+                onClick={() => setDraftExpanded(false)}
+                aria-label="Collapse Purchase Order Draft"
+                title="Collapse Purchase Order Draft"
+                aria-expanded={draftExpanded}
+              >
+                »
+              </button>
+            </div>
+
+            {/* Section: Supplier Information */}
+            <div className="po-sec">
+              <div className="po-sec-title">Supplier Information</div>
+              <div className="po-sup-row">
+                <div className="po-sup-av" style={!SUPPLIER_LOGOS[currentSupplier.id] ? { background: currentSupplier.color } : undefined}>
+                  {SUPPLIER_LOGOS[currentSupplier.id] ? (
+                    <img src={SUPPLIER_LOGOS[currentSupplier.id]} alt={currentSupplier.name} />
+                  ) : (
+                    currentSupplier.initials
+                  )}
+                </div>
+                <div>
+                  <div className="po-sup-name">{currentSupplier.name}</div>
+                  <div className="po-sup-cat">{currentSupplier.category}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section: Minimum Threshold Checklist & MOQ Progress */}
+            <div className="po-sec">
+              <div className="po-sec-title">Minimum Threshold Checklist</div>
+              <div className="po-checklist">
+                <div className="po-check">
+                  <span className={`po-check-ic ${supplierValidation.isMoqMet ? 'pass' : 'fail'}`}>
+                    {supplierValidation.isMoqMet ? '✔' : '✖'}
+                  </span>
+                  <span>
+                    Order value {formatCurrency(totalSelectedAmount)} / {formatCurrency(currentSupplier.targetMoq)} ({Math.min(100, Math.round((totalSelectedAmount / (currentSupplier.targetMoq || 1)) * 100))}%) {supplierValidation.isMoqMet ? '— Minimum met' : `— ${formatCurrency(supplierValidation.remainingAmount)} remaining`}
+                  </span>
+                </div>
+                <div className="po-check">
+                  <span className={`po-check-ic ${supplierValidation.isUnitsMet ? 'pass' : 'fail'}`}>
+                    {supplierValidation.isUnitsMet ? '✔' : '✖'}
+                  </span>
+                  <span>
+                    Order units ({totalSelectedUnits} / {currentSupplier.unitThreshold} units) {supplierValidation.isUnitsMet ? '— Freight threshold met' : `— ${supplierValidation.remainingUnits} units needed`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Dynamic MOQ Alert Banner */}
+              {!supplierValidation.valid && selectedItems.length > 0 && (
+                <div className="moq-alert-banner below" role="alert">
+                  <span>⚠️</span>
+                  <span>{supplierValidation.message}</span>
+                </div>
+              )}
+              {supplierValidation.valid && selectedItems.length > 0 && (
+                <div className="moq-alert-banner met" role="status">
+                  <span>✔</span>
+                  <span>Supplier minimums satisfied — eligible for dispatch</span>
+                </div>
+              )}
+            </div>
+
+            {/* Section: Multi-Supplier Review Notice if other suppliers have selections */}
+            {selectedSupplierGroups.length > 1 && (
+              <div className="po-sec" style={{ background: 'var(--surface)' }}>
+                <div className="po-sec-title" style={{ fontSize: 12, color: 'var(--text2)' }}>
+                  Other Pending Supplier Orders
+                </div>
+                {selectedSupplierGroups
+                  .filter((g) => g.supplier.id !== currentSupplier.id)
+                  .map((g) => (
+                    <div
+                      key={g.supplier.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '4px 0',
+                        fontSize: 11,
+                        color: 'var(--text2)',
+                      }}
+                    >
+                      <span>{g.supplier.name}</span>
+                      <span style={{ fontWeight: 600 }}>
+                        {g.totalUnits} units • {formatCurrency(g.subtotal)}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Section: Financial Summary */}
+            <div className="po-sec">
+              <div className="po-sec-title">Financial Summary</div>
+              <div className="po-fin">
+                <div className="po-fin-row">
+                  <span className="lbl">Subtotal ({selectedItems.length} SKUs)</span>
+                  <span className="val">{formatCurrency(totalSelectedAmount)}</span>
+                </div>
+                <div className="po-fin-row">
+                  <span className="lbl">GST / Tax</span>
+                  <span className="incl">Included</span>
+                </div>
+                <div className="po-fin-row po-fin-total">
+                  <span className="lbl">Total PO Amount</span>
+                  <span className="val">{formatCurrency(totalSelectedAmount)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Section: Order Breakdown */}
+            <div className="po-sec" style={{ flex: 1, overflowY: 'auto' }}>
+              <div className="po-sec-title">Order Breakdown ({selectedItems.length} items)</div>
+              {selectedItems.length === 0 ? (
+                <div className="po-empty">
+                  <div className="po-empty-icon">📋</div>
+                  <div className="po-empty-txt">No items selected for this order draft. Select items from the matrix to build an order.</div>
+                </div>
+              ) : (
+                <div className="po-bk-list">
+                  {selectedItems.map((item) => (
+                    <div key={item.id} className="po-bk-item">
+                      <span className="bk-name" title={item.name}>{item.name}</span>
+                      <span className="bk-units">{item.orderQty} units</span>
+                      <span className="bk-amt">{formatCurrency(item.orderQty * item.unitCost)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Section: Actions (Functional Cancel, Save Draft, and Approve & Dispatch PO) */}
+            <div className="po-actions">
+              <button className="po-discard" onClick={handlePromptCancel}>
+                Cancel
+              </button>
+              <button className="po-save" onClick={handlePromptSaveDraft} disabled={isDispatching}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                <span>Save Draft</span>
+              </button>
+              <button
+                className={`po-approve ${!supplierValidation.valid || isDispatching || selectedItems.length === 0 ? 'btn-dispatch-disabled' : ''}`}
+                onClick={handlePromptSubmitPO}
+                disabled={!supplierValidation.valid || isDispatching || selectedItems.length === 0}
+                title={!supplierValidation.valid ? supplierValidation.message : 'Approve and record purchase order locally'}
+              >
+                {isDispatching ? (
+                  <span>Dispatching...</span>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="m22 2-7 20-4-9-9-4Z"/>
+                      <path d="M22 2 11 13"/>
+                    </svg>
+                    <span>Approve &amp; Dispatch PO →</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </aside>
       </div>
+
+      {/* ─── Pending Manifests Modal ────────────────────────────────────────── */}
+      {manifestsModalOpen && (
+        <div className="confirm-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="manifest-modal-title" onClick={() => setManifestsModalOpen(false)}>
+          <div className="info-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="info-modal-header">
+              <h2 id="manifest-modal-title" className="info-modal-title">
+                <span>📦</span>
+                <span>Pending Manifests — {currentSupplier.name}</span>
+              </h2>
+              <button className="info-modal-close" onClick={() => setManifestsModalOpen(false)} aria-label="Close modal">✕</button>
+            </div>
+            <div className="info-modal-body modal-body">
+              {manifestsList.length === 0 ? (
+                <div className="state-box" style={{ minHeight: 180 }}>
+                  <div className="state-icon">🚚</div>
+                  <h3 className="state-title">No Pending Manifests</h3>
+                  <p className="state-body">There are currently no inbound delivery manifests pending for {currentSupplier.name}.</p>
+                </div>
+              ) : (
+                <table className="modal-table">
+                  <thead>
+                    <tr>
+                      <th>Manifest #</th>
+                      <th>Expected Arrival</th>
+                      <th>Items</th>
+                      <th>Units</th>
+                      <th>Carrier</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {manifestsList.map((m) => (
+                      <tr key={m.id}>
+                        <td><strong>{m.manifestNumber}</strong></td>
+                        <td>{m.expectedDate}</td>
+                        <td>{m.itemsCount} SKUs</td>
+                        <td>{m.totalUnits}</td>
+                        <td>{m.carrier}</td>
+                        <td>
+                          <span className={`modal-badge ${m.status}`}>
+                            {m.status.replace('_', ' ')}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="confirm-modal-actions" style={{ marginTop: 18 }}>
+              <button className="btn-cancel" onClick={() => setManifestsModalOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── PO History Modal ──────────────────────────────────────────────── */}
+      {poHistoryModalOpen && (
+        <div className="confirm-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="pohist-modal-title" onClick={() => setPoHistoryModalOpen(false)}>
+          <div className="info-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="info-modal-header">
+              <h2 id="pohist-modal-title" className="info-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {SUPPLIER_LOGOS[currentSupplier.id] ? (
+                  <img src={SUPPLIER_LOGOS[currentSupplier.id]} alt="" style={{ width: 26, height: 26, objectFit: 'contain', borderRadius: 4, background: '#fff', border: '1px solid var(--border)', padding: 1 }} />
+                ) : (
+                  <span>📑</span>
+                )}
+                <span>Purchase Order History — {currentSupplier.name}</span>
+              </h2>
+              <button className="info-modal-close" onClick={() => setPoHistoryModalOpen(false)} aria-label="Close modal">✕</button>
+            </div>
+            <div className="info-modal-body modal-body">
+              {poHistoryList.length === 0 ? (
+                <div className="state-box" style={{ minHeight: 180 }}>
+                  <div className="state-icon">📋</div>
+                  <h3 className="state-title">No Purchase Order History</h3>
+                  <p className="state-body">No previous purchase orders have been submitted for {currentSupplier.name}.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {poHistoryList.map((po) => (
+                    <div key={po.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--bg)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <strong style={{ fontSize: 13, color: 'var(--text)' }}>{po.poNumber}</strong>
+                          <span className={`modal-badge ${po.status}`}>{po.status}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand)' }}>{formatCurrency(po.totalAmount)}</span>
+                          <button
+                            onClick={() => handlePromptDeletePO(po)}
+                            title="Delete PO record"
+                            style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}
+                          >
+                            🗑
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>
+                        Created: {new Date(po.createdAt).toLocaleDateString()} &bull; {po.notes || 'Standard Order'}
+                      </div>
+                      {po.items && po.items.length > 0 && (
+                        <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {po.items.map((it) => (
+                            <span key={it.id} style={{ fontSize: 11, background: 'var(--surface)', padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)' }}>
+                              {it.name} ({it.quantity}x)
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="confirm-modal-actions" style={{ marginTop: 18 }}>
+              <button className="btn-cancel" onClick={() => setPoHistoryModalOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Supplier Contact Modal ────────────────────────────────────────── */}
+      {contactModalOpen && (
+        <div className="confirm-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="contact-modal-title" onClick={() => setContactModalOpen(false)}>
+          <div className="info-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="info-modal-header">
+              <h2 id="contact-modal-title" className="info-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {SUPPLIER_LOGOS[currentSupplier.id] ? (
+                  <img src={SUPPLIER_LOGOS[currentSupplier.id]} alt="" style={{ width: 26, height: 26, objectFit: 'contain', borderRadius: 4, background: '#fff', border: '1px solid var(--border)', padding: 1 }} />
+                ) : (
+                  <span>📞</span>
+                )}
+                <span>Contact Supplier — {currentSupplier.name}</span>
+              </h2>
+              <button className="info-modal-close" onClick={() => setContactModalOpen(false)} aria-label="Close modal">✕</button>
+            </div>
+            <div className="info-modal-body modal-body">
+              <div className="contact-grid">
+                <div className="contact-item">
+                  <div className="contact-label">Account Representative</div>
+                  <div className="contact-val">{contactData?.contactRep || 'Information unavailable'}</div>
+                </div>
+                <div className="contact-item">
+                  <div className="contact-label">Direct Email</div>
+                  <div className="contact-val">
+                    {contactData?.contactEmail ? (
+                      <a href={`mailto:${contactData.contactEmail}`}>{contactData.contactEmail}</a>
+                    ) : 'Information unavailable'}
+                  </div>
+                </div>
+                <div className="contact-item">
+                  <div className="contact-label">Phone Support</div>
+                  <div className="contact-val">
+                    {contactData?.contactPhone ? (
+                      <a href={`tel:${contactData.contactPhone}`}>{contactData.contactPhone}</a>
+                    ) : 'Information unavailable'}
+                  </div>
+                </div>
+                <div className="contact-item">
+                  <div className="contact-label">Standard Lead Time</div>
+                  <div className="contact-val">{contactData?.leadTime || currentSupplier.leadTime || 'Information unavailable'}</div>
+                </div>
+                <div className="contact-item" style={{ gridColumn: '1 / -1' }}>
+                  <div className="contact-label">Warehouse &amp; Dispatch Address</div>
+                  <div className="contact-val">{contactData?.contactAddress || 'Information unavailable'}</div>
+                </div>
+              </div>
+            </div>
+            <div className="confirm-modal-actions" style={{ marginTop: 18 }}>
+              <button className="btn-cancel" onClick={() => setContactModalOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Unified State-Changing Confirmation Modal (Cancel, Save, Submit, Delete) ─── */}
+      {confirmModalConfig && (
+        <div className="confirm-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-action-title">
+          <div className="confirm-modal">
+            <div className="confirm-modal-header">
+              <span className="confirm-modal-icon">⚠️</span>
+              <h3 id="confirm-action-title" className="confirm-modal-title">{confirmModalConfig.title}</h3>
+            </div>
+            <p className="confirm-modal-body">{confirmModalConfig.message}</p>
+            <div className="confirm-modal-actions">
+              <button className="btn-cancel" onClick={confirmModalConfig.onCancel}>
+                Keep Editing
+              </button>
+              <button className={confirmModalConfig.confirmClass || 'btn-primary-action'} onClick={confirmModalConfig.onConfirm}>
+                {confirmModalConfig.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Unsaved Changes Confirmation Modal ──────────────────────────── */}
       {showUnsavedModal && (
@@ -1705,6 +2336,42 @@ export default function ReplenishmentPage() {
           </div>
         </div>
       )}
+
+      {/* ─── Filter Modal ─────────────────────────────────────────────────── */}
+      <FilterModal
+        isOpen={filterModalOpen}
+        onClose={() => setFilterModalOpen(false)}
+        appliedFilters={appliedFilters}
+        onApply={(newFilters) => setAppliedFilters(newFilters)}
+        suppliers={suppliers}
+        categories={categories}
+        products={products}
+      />
+
+      {/* ─── Bulk Edit Modal ───────────────────────────────────────────────── */}
+      <BulkEditModal
+        isOpen={bulkEditModalOpen}
+        onClose={() => setBulkEditModalOpen(false)}
+        selectedProducts={selectedProducts}
+        categories={categories}
+        onSave={handleBulkEdit}
+      />
+
+      {/* ─── Add Product Modal ─────────────────────────────────────────────── */}
+      <AddProductModal
+        isOpen={addProductModalOpen}
+        onClose={() => setAddProductModalOpen(false)}
+        suppliers={suppliers}
+        categories={categories}
+        onProductCreated={handleProductCreated}
+      />
+
+      {/* ─── Add Supplier Modal ────────────────────────────────────────────── */}
+      <AddSupplierModal
+        isOpen={addSupplierModalOpen}
+        onClose={() => setAddSupplierModalOpen(false)}
+        onSupplierCreated={handleSupplierCreated}
+      />
 
       {/* ─── Toast Feedback Notification ──────────────────────────────────── */}
       {toast && (

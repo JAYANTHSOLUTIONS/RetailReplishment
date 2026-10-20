@@ -2,6 +2,5 @@
 export { default as ReplenishmentPage } from './ReplenishmentPage';
 export { default as ProductTable }      from './ProductTable';
 export { default as Filters }           from './Filters';
-export { default as QuantityEditor }    from './QuantityEditor';
 export { default as SupplierSummary }   from './SupplierSummary';
 export { default as PriorityRules }     from './PriorityRules';
