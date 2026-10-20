@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect,useRef } from 'react';
 import '../../styles/replenishment.css';
 
 // ── Mock Initial Data ──────────────────────────────────────────────────────────
@@ -331,6 +331,7 @@ export default function ReplenishmentPage() {
     if (original) {
       setEditQtyValue(String(original.orderQty));
     }
+    setEditingSku(null);
     setIsUnsaved(false);
     setShowUnsavedModal(false);
     if (pendingAction) {
@@ -424,7 +425,7 @@ export default function ReplenishmentPage() {
           setStateDropdownOpen(false);
           return;
         }
-        if (isUnsaved) {
+        if (editingSku) {
           handleCancelInlineQty();
           return;
         }
@@ -465,7 +466,29 @@ export default function ReplenishmentPage() {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [sortedProducts, focusedRowIndex, isUnsaved, showUnsavedModal, stateDropdownOpen]);
+  }, [sortedProducts, focusedRowIndex, editingSku, isUnsaved, showUnsavedModal, stateDropdownOpen]);
+
+  // Auto-scroll table into view when focused row changes via keyboard navigation
+  useEffect(() => {
+    if (focusedRowIndex === null || focusedRowIndex === undefined) return;
+    const rowEl = tableRef.current?.querySelector(`.pr[data-row-index="${focusedRowIndex}"]`);
+    if (rowEl) {
+      rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        rowEl.focus({ preventScroll: true });
+      }
+    }
+  }, [focusedRowIndex]);
+
+  // Return focus to table row when exiting inline edit
+  useEffect(() => {
+    if (!editingSku && focusedRowIndex !== null && focusedRowIndex !== undefined) {
+      const rowEl = tableRef.current?.querySelector(`.pr[data-row-index="${focusedRowIndex}"]`);
+      if (rowEl && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        rowEl.focus({ preventScroll: true });
+      }
+    }
+  }, [editingSku]);
 
   // Group products by priority
   const criticalItems = sortedProducts.filter((p) => p.priority === 'critical');
@@ -543,11 +566,20 @@ export default function ReplenishmentPage() {
         return p;
       })
     );
+    setEditingSku(null);
     setIsUnsaved(false);
     showToast(`Updated quantity for ${sku} to ${validQty} units.`);
   };
 
   const handleCancelInlineQty = () => {
+    const currentProd = products.find((p) => p.sku === editingSku);
+    const originalVal = currentProd ? String(currentProd.orderQty) : '';
+    // If not modified or unchanged, just close inline edit immediately without prompt
+    if (!isUnsaved || editQtyValue === originalVal) {
+      setEditingSku(null);
+      setIsUnsaved(false);
+      return;
+    }
     requestActionWithUnsavedCheck(() => {
       confirmDiscardUnsaved();
     });
@@ -1138,7 +1170,7 @@ export default function ReplenishmentPage() {
 
           {appState === 'default' && (
             <div className="tbl-wrap">
-              <table className="tbl" aria-label="Replenishment products table">
+              <table className="tbl" ref={tableRef} aria-label="Replenishment products table">
                 <thead>
                   <tr>
                     <th className="col-chk">
@@ -1185,6 +1217,7 @@ export default function ReplenishmentPage() {
                         return (
                           <tr
                             key={prod.id}
+                            data-row-index={globalIdx}
                             className={`pr ${prod.selected ? 'sel' : ''} ${isRowFocused ? 'focused' : ''}`}
                             tabIndex={0}
                             onFocus={() => setFocusedRowIndex(globalIdx)}
@@ -1228,7 +1261,10 @@ export default function ReplenishmentPage() {
                                     }}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') handleSaveInlineQty(prod.sku);
-                                      if (e.key === 'Escape') handleCancelInlineQty();
+                                      if (e.key === 'Escape') {
+                                        e.stopPropagation();
+                                        handleCancelInlineQty();
+                                      }
                                     }}
                                     autoFocus
                                     aria-label="Order Quantity"
@@ -1254,6 +1290,7 @@ export default function ReplenishmentPage() {
                                 <button
                                   className={`qty-disp ${prod.orderQty === 0 ? 'qty-zero' : ''}`}
                                   onClick={() => {
+                                    setFocusedRowIndex(globalIdx);
                                     setEditingSku(prod.sku);
                                     setEditQtyValue(String(prod.orderQty));
                                     setIsUnsaved(false);
@@ -1295,6 +1332,7 @@ export default function ReplenishmentPage() {
                         return (
                           <tr
                             key={prod.id}
+                            data-row-index={globalIdx}
                             className={`pr ${prod.selected ? 'sel' : ''} ${isRowFocused ? 'focused' : ''}`}
                             tabIndex={0}
                             onFocus={() => setFocusedRowIndex(globalIdx)}
@@ -1337,7 +1375,10 @@ export default function ReplenishmentPage() {
                                     }}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') handleSaveInlineQty(prod.sku);
-                                      if (e.key === 'Escape') handleCancelInlineQty();
+                                      if (e.key === 'Escape') {
+                                        e.stopPropagation();
+                                        handleCancelInlineQty();
+                                      }
                                     }}
                                     autoFocus
                                     aria-label="Order Quantity"
@@ -1363,6 +1404,7 @@ export default function ReplenishmentPage() {
                                 <button
                                   className={`qty-disp ${prod.orderQty === 0 ? 'qty-zero' : ''}`}
                                   onClick={() => {
+                                    setFocusedRowIndex(globalIdx);
                                     setEditingSku(prod.sku);
                                     setEditQtyValue(String(prod.orderQty));
                                     setIsUnsaved(false);
@@ -1404,6 +1446,7 @@ export default function ReplenishmentPage() {
                         return (
                           <tr
                             key={prod.id}
+                            data-row-index={globalIdx}
                             className={`pr ${prod.selected ? 'sel' : ''} ${isRowFocused ? 'focused' : ''}`}
                             tabIndex={0}
                             onFocus={() => setFocusedRowIndex(globalIdx)}
@@ -1446,7 +1489,10 @@ export default function ReplenishmentPage() {
                                     }}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') handleSaveInlineQty(prod.sku);
-                                      if (e.key === 'Escape') handleCancelInlineQty();
+                                      if (e.key === 'Escape') {
+                                        e.stopPropagation();
+                                        handleCancelInlineQty();
+                                      }
                                     }}
                                     autoFocus
                                     aria-label="Order Quantity"
@@ -1472,6 +1518,7 @@ export default function ReplenishmentPage() {
                                 <button
                                   className={`qty-disp ${prod.orderQty === 0 ? 'qty-zero' : ''}`}
                                   onClick={() => {
+                                    setFocusedRowIndex(globalIdx);
                                     setEditingSku(prod.sku);
                                     setEditQtyValue(String(prod.orderQty));
                                     setIsUnsaved(false);
