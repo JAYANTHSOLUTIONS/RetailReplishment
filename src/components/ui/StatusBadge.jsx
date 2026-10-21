@@ -1,8 +1,5 @@
 // src/components/ui/StatusBadge.jsx
 // Visual indicator for product / order status (e.g. critical, low, ok, ordered).
-
-import React from 'react';
-
 const STATUS_LABELS = {
   critical: 'Critical',
   low:      'Low',

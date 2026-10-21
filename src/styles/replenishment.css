@@ -2089,13 +2089,23 @@ button, input, select, textarea {
   height: 100%;
   overflow-y: auto;
   opacity: 1;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .collapse-horizontal.is-collapsed .collapse-horizontal-inner {
-  display: none !important;
-  pointer-events: none !important;
   opacity: 0;
+  visibility: hidden;
+  pointer-events: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-body,
+  .collapse-horizontal,
+  .collapse-horizontal-inner,
+  .collapsed-rail {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 /* Collapsed vertical rail shown when collapsed */

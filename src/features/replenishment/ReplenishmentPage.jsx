@@ -29,15 +29,8 @@ import mainLogo from '../../assets/logos/main-logo.png';
 import draftLogo from '../../assets/logos/draft-logo.png';
 import queueLogo from '../../assets/logos/queue-logo.png';
 import matrixLogo from '../../assets/logos/matrix-logo.png';
-import supplierHFSrc from '../../assets/suppliers/supplier-hf.jpg';
-import supplierBISrc from '../../assets/suppliers/supplier-bi.jpg';
-import supplierNFSrc from '../../assets/suppliers/supplier-nf.jpg';
-
-export const SUPPLIER_LOGOS = {
-  hf: supplierHFSrc,
-  bi: supplierBISrc,
-  nf: supplierNFSrc,
-};
+import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
+import { validateOrderQtyInput } from '../../utils/validation.js';
 
 // ── Initial Seed / Fallback Data ──────────────────────────────────────────────
 const INITIAL_SUPPLIERS = [
@@ -296,6 +289,7 @@ export default function ReplenishmentPage() {
 
   // Active supplier & search
   const [selectedSupplierId, setSelectedSupplierId] = useState('hf');
+  const [activeQueueSupplierId, setActiveQueueSupplierId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Advanced Filter Modal State
@@ -303,7 +297,6 @@ export default function ReplenishmentPage() {
     statuses: [],
     suppliers: [],
     categories: [],
-    stockLevels: [],
     search: '',
   });
   const [filterModalOpen, setFilterModalOpen] = useState(false);
@@ -338,6 +331,7 @@ export default function ReplenishmentPage() {
   const [editingSku, setEditingSku] = useState(null);
   const [editQtyValue, setEditQtyValue] = useState('0');
   const [isUnsaved, setIsUnsaved] = useState(false);
+  const [inlineQtyError, setInlineQtyError] = useState(null);
 
   // Unsaved quantity changes modal
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
@@ -459,16 +453,21 @@ export default function ReplenishmentPage() {
     if (appliedFilters.statuses?.length) count += appliedFilters.statuses.length;
     if (appliedFilters.suppliers?.length) count += appliedFilters.suppliers.length;
     if (appliedFilters.categories?.length) count += appliedFilters.categories.length;
-    if (appliedFilters.stockLevels?.length) count += appliedFilters.stockLevels.length;
     if (appliedFilters.search?.trim()) count += 1;
+    if (activeQueueSupplierId) count += 1;
     return count;
-  }, [appliedFilters]);
+  }, [appliedFilters, activeQueueSupplierId]);
 
   const hasActiveFilters = activeFilterCount > 0;
 
-  // Filter products using global search + advanced filter rules (AND across groups, OR within group)
+  // Filter products using queue supplier filter + global search + advanced filter rules (AND across groups, OR within group)
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
+      // 1. Supplier filter from Supplier Queue selection (stable ID matching)
+      if (activeQueueSupplierId && p.supplierId !== activeQueueSupplierId) {
+        return false;
+      }
+      // 2. Global search
       if (searchTerm.trim()) {
         const q = searchTerm.trim().toLowerCase();
         const match =
@@ -478,9 +477,10 @@ export default function ReplenishmentPage() {
           p.id.toLowerCase().includes(q);
         if (!match) return false;
       }
+      // 3. Applied modal filters
       return matchesFilters(p, appliedFilters);
     });
-  }, [products, appliedFilters, searchTerm]);
+  }, [products, appliedFilters, searchTerm, activeQueueSupplierId]);
 
   // Stable default ordering: ascending Product ID
   const displayProducts = useMemo(() => {
@@ -494,7 +494,7 @@ export default function ReplenishmentPage() {
 
   // Auto-reset page 1 on filter/search change and clamp page when totalPages shrinks (during render)
   const [prevFilterKey, setPrevFilterKey] = useState('');
-  const currentFilterKey = `${searchTerm}::${JSON.stringify(appliedFilters)}`;
+  const currentFilterKey = `${searchTerm}::${activeQueueSupplierId}::${JSON.stringify(appliedFilters)}`;
   if (prevFilterKey !== currentFilterKey) {
     setPrevFilterKey(currentFilterKey);
     setCurrentPage(1);
@@ -559,30 +559,11 @@ export default function ReplenishmentPage() {
     return products.filter((p) => p.selected && p.orderStatus !== 'ordered');
   }, [products]);
 
-  // Derived selection-based panel visibility: True if >= 1 eligible product is ticked
-  const hasEligibleSelection = useMemo(() => {
-    return products.some((p) => p.selected && p.orderStatus !== 'ordered');
-  }, [products]);
 
-  // Contextual Supplier Queue:
-  // Shows suppliers relevant to selected products and active filters
+  // Supplier Queue: shows suppliers so user can inspect and filter by any supplier at any time
   const activeQueueSuppliers = useMemo(() => {
-    const suppliersWithSelected = new Set(
-      products.filter((p) => p.selected && p.orderStatus !== 'ordered').map((p) => p.supplierId)
-    );
-
-    let eligibleIds = new Set();
-    suppliersWithSelected.forEach((id) => eligibleIds.add(id));
-    if (hasActiveFilters) {
-      filteredProducts.forEach((p) => eligibleIds.add(p.supplierId));
-    }
-
-    if (eligibleIds.size === 0) {
-      return suppliers;
-    }
-
-    return suppliers.filter((s) => eligibleIds.has(s.id));
-  }, [hasActiveFilters, filteredProducts, products, suppliers]);
+    return suppliers;
+  }, [suppliers]);
 
   // Ensure selectedSupplierId points to an active supplier in queue if available
   useEffect(() => {
@@ -671,7 +652,6 @@ export default function ReplenishmentPage() {
         } else {
           const remainingSelected = products.some((p) => !eligibleIds.includes(p.id) && p.selected && p.orderStatus !== 'ordered');
           if (!remainingSelected) {
-            setSqExpanded(false);
             setDraftExpanded(false);
           }
         }
@@ -707,7 +687,6 @@ export default function ReplenishmentPage() {
         if (eligibleIds.length > 0) {
           const firstSelected = products.find((x) => x.id === eligibleIds[0]);
           if (firstSelected) setSelectedSupplierId(firstSelected.supplierId);
-          setSqExpanded(true);
           setDraftExpanded(true);
         }
         showToast(`Selected all ${eligibleIds.length} filtered products.`);
@@ -723,7 +702,6 @@ export default function ReplenishmentPage() {
       try {
         await clearAllSelection();
         setProducts((prev) => prev.map((p) => ({ ...p, selected: false })));
-        setSqExpanded(false);
         setDraftExpanded(false);
         showToast('Selection cleared.');
       } catch {
@@ -754,12 +732,10 @@ export default function ReplenishmentPage() {
         );
         if (nextSelected) {
           setSelectedSupplierId(target.supplierId);
-          setSqExpanded(true);
           setDraftExpanded(true);
         } else {
           const remainingSelected = products.some((p) => p.id !== id && p.selected && p.orderStatus !== 'ordered');
           if (!remainingSelected) {
-            setSqExpanded(false);
             setDraftExpanded(false);
           }
         }
@@ -795,10 +771,16 @@ export default function ReplenishmentPage() {
     showToast(`Supplier "${newSupplier.name}" created successfully.`);
   };
 
-  // Save inline quantity edit
+  // Save inline quantity edit with strict limits and error reporting
   const handleSaveInlineQty = async (sku) => {
-    const parsed = parseInt(editQtyValue, 10);
-    const validQty = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+    const check = validateOrderQtyInput(editQtyValue);
+    if (!check.isValid) {
+      setInlineQtyError(check.error);
+      showToast(check.error, 'warn');
+      return;
+    }
+    setInlineQtyError(null);
+    const validQty = check.value;
     try {
       await updateItemOrderQty(sku, validQty);
       setProducts((prev) =>
@@ -813,15 +795,20 @@ export default function ReplenishmentPage() {
           return p;
         })
       );
+      if (validQty > 0) {
+        setDraftExpanded(true);
+      }
       setEditingSku(null);
       setIsUnsaved(false);
       showToast(`Updated quantity for ${sku} to ${validQty} units.`);
-    } catch {
-      showToast('Failed to persist quantity update to SQLite.', 'warn');
+    } catch (err) {
+      setInlineQtyError(err.message || 'Failed to persist quantity update to SQLite.');
+      showToast(err.message || 'Failed to persist quantity update to SQLite.', 'warn');
     }
   };
 
   const handleCancelInlineQty = () => {
+    setInlineQtyError(null);
     const currentProd = products.find((p) => p.sku === editingSku);
     const originalVal = currentProd ? String(currentProd.orderQty) : '';
     if (!isUnsaved || editQtyValue === originalVal) {
@@ -831,6 +818,21 @@ export default function ReplenishmentPage() {
     }
     requestActionWithUnsavedCheck(() => {
       confirmDiscardUnsaved();
+    });
+  };
+
+  // Supplier Queue selection: filters table to this supplier and enables/expands queue
+  const handleSelectQueueSupplier = (supId) => {
+    requestActionWithUnsavedCheck(() => {
+      setSelectedSupplierId(supId);
+      setActiveQueueSupplierId(supId);
+      setSqExpanded(true);
+    });
+  };
+
+  const handleClearQueueSupplierFilter = () => {
+    requestActionWithUnsavedCheck(() => {
+      setActiveQueueSupplierId(null);
     });
   };
 
@@ -872,7 +874,6 @@ export default function ReplenishmentPage() {
           await clearAllSelection();
           setProducts((prev) => prev.map((p) => ({ ...p, selected: false })));
           setIsUnsaved(false);
-          setSqExpanded(false);
           setDraftExpanded(false);
           setConfirmModalConfig(null);
           showToast('Selection cancelled successfully.');
@@ -958,7 +959,6 @@ export default function ReplenishmentPage() {
               return p;
             })
           );
-          setSqExpanded(false);
           setDraftExpanded(false);
 
           // 2. Reload authoritative inventory from SQLite & recalculate priorities
@@ -1281,6 +1281,7 @@ export default function ReplenishmentPage() {
               }}
               aria-label="Expand Supplier Queue"
               aria-expanded={sqExpanded}
+              aria-controls="collapse-supplier-queue"
             >
               »
             </button>
@@ -1290,12 +1291,16 @@ export default function ReplenishmentPage() {
             </span>
           </div>
 
-          <div className="collapse-horizontal-inner">
+          <div
+            className="collapse-horizontal-inner"
+            aria-hidden={!sqExpanded}
+            inert={!sqExpanded ? '' : undefined}
+          >
             <div className="sq-head">
               <div className="sq-head-l" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <img src={queueLogo} alt="" className="section-queue-logo" />
                 <span>Supplier Queue</span>
-                <span className="sq-cnt">Relevant ({activeQueueSuppliers.length})</span>
+                <span className="sq-cnt">({activeQueueSuppliers.length})</span>
               </div>
               <button
                 id="btn-collapse-sq"
@@ -1304,6 +1309,7 @@ export default function ReplenishmentPage() {
                 aria-label="Collapse Supplier Queue"
                 title="Collapse Supplier Queue"
                 aria-expanded={sqExpanded}
+                aria-controls="collapse-supplier-queue"
               >
                 «
               </button>
@@ -1312,17 +1318,19 @@ export default function ReplenishmentPage() {
             <div className="sq-cards">
               {activeQueueSuppliers.map((sup) => {
                 const isActive = sup.id === selectedSupplierId;
+                const isFilterActive = activeQueueSupplierId === sup.id;
                 const supSelectedItems = products.filter((p) => p.supplierId === sup.id && p.selected && p.orderQty > 0 && p.orderStatus !== 'ordered');
                 const supValidation = validateSupplierMoq(sup, supSelectedItems);
 
                 return (
                   <div
                     key={sup.id}
-                    className={`sc ${isActive ? 'active' : ''}`}
-                    onClick={() => requestActionWithUnsavedCheck(() => setSelectedSupplierId(sup.id))}
+                    className={`sc ${isActive ? 'active' : ''} ${isFilterActive ? 'sc-filter-active' : ''}`}
+                    onClick={() => handleSelectQueueSupplier(sup.id)}
                     tabIndex={0}
                     role="button"
                     aria-pressed={isActive}
+                    title={`Select ${sup.name} to view details and filter matrix products`}
                   >
                     <div className="sc-top">
                       <div className="sc-av" style={!SUPPLIER_LOGOS[sup.id] ? { background: sup.color } : undefined}>
@@ -1493,11 +1501,42 @@ export default function ReplenishmentPage() {
                 {hasActiveFilters && (
                   <button
                     className="btn-clear-filters"
-                    onClick={() => setAppliedFilters({ statuses: [], suppliers: [], categories: [], stockLevels: [], search: '' })}
+                    onClick={() => {
+                      setAppliedFilters({ statuses: [], suppliers: [], categories: [], search: '' });
+                      setActiveQueueSupplierId(null);
+                    }}
                     title="Clear applied filters"
                   >
                     Clear filters
                   </button>
+                )}
+                {activeQueueSupplierId && (
+                  <span
+                    className="active-supplier-pill"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: 'var(--brand-bg, #eff6ff)',
+                      border: '1px solid var(--brand, #2563eb)',
+                      color: 'var(--brand, #2563eb)',
+                      padding: '2px 8px',
+                      borderRadius: 14,
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span>Supplier: {suppliers.find((s) => s.id === activeQueueSupplierId)?.name || activeQueueSupplierId}</span>
+                    <button
+                      type="button"
+                      onClick={handleClearQueueSupplierFilter}
+                      aria-label="Clear active supplier filter"
+                      style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 12, lineHeight: 1 }}
+                      title="Clear supplier filter"
+                    >
+                      ✕
+                    </button>
+                  </span>
                 )}
                 <span className="filter-res-txt">
                   Showing {displayProducts.length} of {products.length} products
@@ -1666,7 +1705,7 @@ export default function ReplenishmentPage() {
                   className="retry-btn"
                   onClick={() => {
                     setSearchTerm('');
-                    setAppliedFilters({ statuses: [], suppliers: [], categories: [], stockLevels: [], search: '' });
+                    setAppliedFilters({ statuses: [], suppliers: [], categories: [], search: '' });
                   }}
                 >
                   Clear Search &amp; Filters
@@ -1780,11 +1819,15 @@ export default function ReplenishmentPage() {
                               <div className="qty-wrap">
                                 <input
                                   type="number"
-                                  className="qty-inp"
+                                  className={`qty-inp ${inlineQtyError ? 'has-error' : ''}`}
+                                  min="0"
+                                  max="99999"
+                                  step="1"
                                   value={editQtyValue}
                                   onChange={(e) => {
                                     setEditQtyValue(e.target.value);
                                     setIsUnsaved(true);
+                                    if (inlineQtyError) setInlineQtyError(null);
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') handleSaveInlineQty(prod.sku);
@@ -1795,7 +1838,19 @@ export default function ReplenishmentPage() {
                                   }}
                                   autoFocus
                                   aria-label="Order Quantity"
+                                  aria-invalid={!!inlineQtyError}
+                                  aria-describedby={inlineQtyError ? `inline-qty-err-${prod.sku}` : undefined}
                                 />
+                                {inlineQtyError && (
+                                  <div
+                                    id={`inline-qty-err-${prod.sku}`}
+                                    className="field-error inline-qty-error"
+                                    role="alert"
+                                    style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px', whiteSpace: 'nowrap' }}
+                                  >
+                                    {inlineQtyError}
+                                  </div>
+                                )}
                                 <div className="qty-actions">
                                   {isUnsaved && <span className="qty-unsaved">Unsaved</span>}
                                   <button
@@ -1930,6 +1985,7 @@ export default function ReplenishmentPage() {
               }}
               aria-label="Expand Purchase Order Draft"
               aria-expanded={draftExpanded}
+              aria-controls="collapse-po-draft"
             >
               «
             </button>
@@ -1939,7 +1995,11 @@ export default function ReplenishmentPage() {
             </span>
           </div>
 
-          <div className="collapse-horizontal-inner">
+          <div
+            className="collapse-horizontal-inner"
+            aria-hidden={!draftExpanded}
+            inert={!draftExpanded ? '' : undefined}
+          >
             <div className="po-head">
               <div className="po-head-l" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <img src={draftLogo} alt="" className="section-draft-logo" />
@@ -1952,6 +2012,7 @@ export default function ReplenishmentPage() {
                 aria-label="Collapse Purchase Order Draft"
                 title="Collapse Purchase Order Draft"
                 aria-expanded={draftExpanded}
+                aria-controls="collapse-po-draft"
               >
                 »
               </button>

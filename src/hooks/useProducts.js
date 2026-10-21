@@ -11,7 +11,6 @@ export function useProducts() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     productsService.getAll()
       .then((data) => { if (!cancelled) setProducts(data); })
       .catch((err)  => { if (!cancelled) setError(err);    })

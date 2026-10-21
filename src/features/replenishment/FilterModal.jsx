@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { matchesFilters } from '../../utils';
-import { SUPPLIER_LOGOS } from './ReplenishmentPage.jsx';
-export { matchesFilters };
+import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
 
 export default function FilterModal({
   isOpen,
@@ -21,7 +20,6 @@ export default function FilterModal({
     statuses: activeFilters.statuses ? [...activeFilters.statuses] : [],
     suppliers: activeFilters.suppliers ? [...activeFilters.suppliers] : [],
     categories: activeFilters.categories ? [...activeFilters.categories] : [],
-    stockLevels: activeFilters.stockLevels ? [...activeFilters.stockLevels] : [],
     search: activeFilters.search || '',
   }));
 
@@ -35,7 +33,6 @@ export default function FilterModal({
         statuses: activeFilters.statuses ? [...activeFilters.statuses] : [],
         suppliers: activeFilters.suppliers ? [...activeFilters.suppliers] : [],
         categories: activeFilters.categories ? [...activeFilters.categories] : [],
-        stockLevels: activeFilters.stockLevels ? [...activeFilters.stockLevels] : [],
         search: activeFilters.search || '',
       });
     }
@@ -62,7 +59,6 @@ export default function FilterModal({
       statuses: [],
       suppliers: [],
       categories: [],
-      stockLevels: [],
       search: '',
     });
   };
@@ -149,28 +145,6 @@ export default function FilterModal({
                     />
                     <span className="filter-chip-dot" style={{ background: st.dotColor }}></span>
                     <span className="filter-chip-label">{st.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Stock Level Group */}
-            <div className="filter-group">
-              <div className="filter-section-title">Stock Level</div>
-              <div className="filter-options-list">
-                {[
-                  { key: 'below', label: 'Below safety target' },
-                  { key: 'at', label: 'At safety target' },
-                  { key: 'above', label: 'Above safety target' },
-                ].map((lvl) => (
-                  <label key={lvl.key} className="filter-checkbox-label">
-                    <input
-                      type="checkbox"
-                      className="cb"
-                      checked={pending.stockLevels.includes(lvl.key)}
-                      onChange={() => toggleArrayItem('stockLevels', lvl.key)}
-                    />
-                    <span className="filter-chip-label">{lvl.label}</span>
                   </label>
                 ))}
               </div>

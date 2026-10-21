@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createProduct, getNextProductIdentifiers } from '../../db/queries.js';
-import { SUPPLIER_LOGOS } from './ReplenishmentPage.jsx';
+import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
+import { validateProductForm, FIELD_LIMITS } from '../../utils/validation.js';
 
 export default function AddProductModal({
   isOpen,
@@ -30,19 +31,19 @@ export default function AddProductModal({
   useEffect(() => {
     if (!isOpen) return;
     let active = true;
-    setLoadingId(true);
-    getNextProductIdentifiers(supplierId)
-      .then(({ nextId, nextSku }) => {
-        if (!active) return;
-        setAutoId(nextId);
-        setAutoSku(nextSku);
-      })
-      .catch((err) => {
+    (async () => {
+      try {
+        const { nextId, nextSku } = await getNextProductIdentifiers(supplierId);
+        if (active) {
+          setAutoId(nextId);
+          setAutoSku(nextSku);
+          setLoadingId(false);
+        }
+      } catch (err) {
         console.warn('Failed to generate unique identifiers from SQLite:', err);
-      })
-      .finally(() => {
         if (active) setLoadingId(false);
-      });
+      }
+    })();
 
     return () => {
       active = false;
@@ -51,28 +52,37 @@ export default function AddProductModal({
 
   if (!isOpen) return null;
 
+  const clearFieldError = (field) => {
+    if (errors[field] || errors.form) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        delete next.form;
+        return next;
+      });
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const newErrors = {};
+    const chosenCategory = (category === '__custom__' ? customCategory : category).trim();
 
-    if (!name.trim()) newErrors.name = 'Product name is required.';
-    if (!supplierId) newErrors.supplierId = 'Supplier is required.';
+    const validation = validateProductForm({
+      name,
+      category: chosenCategory,
+      currentStock,
+      safetyTarget,
+      unitCost,
+      orderQty,
+    });
 
-    const chosenCategory = customCategory.trim() || category.trim();
-    if (!chosenCategory) newErrors.category = 'Category is required.';
+    if (!supplierId) {
+      validation.errors.supplierId = 'Supplier is required.';
+      validation.isValid = false;
+    }
 
-    const stock = parseInt(currentStock, 10);
-    const target = parseInt(safetyTarget, 10);
-    const price = parseFloat(unitCost);
-    const qty = parseInt(orderQty, 10) || 0;
-
-    if (isNaN(stock) || stock < 0) newErrors.currentStock = 'Must be non-negative.';
-    if (isNaN(target) || target < 0) newErrors.safetyTarget = 'Must be non-negative.';
-    if (isNaN(price) || price < 0) newErrors.unitCost = 'Must be non-negative.';
-    if (isNaN(qty) || qty < 0) newErrors.orderQty = 'Must be non-negative.';
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+    if (!validation.isValid) {
+      setErrors(validation.errors);
       return;
     }
 
@@ -85,10 +95,10 @@ export default function AddProductModal({
         name: name.trim(),
         supplierId,
         category: chosenCategory,
-        currentStock: stock,
-        safetyTarget: target,
-        unitCost: price,
-        orderQty: qty,
+        currentStock: parseInt(currentStock, 10),
+        safetyTarget: parseInt(safetyTarget, 10),
+        unitCost: parseFloat(unitCost),
+        orderQty: parseInt(orderQty, 10) || 0,
       });
 
       setIsSubmitting(false);
@@ -124,7 +134,7 @@ export default function AddProductModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <div className="filter-modal-body modal-form-body">
             {errors.form && (
               <div className="form-error-banner" role="alert">
@@ -132,11 +142,15 @@ export default function AddProductModal({
               </div>
             )}
 
+            {/* Auto ID Notice */}
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
+              Auto ID Assignment: Next available SKU is <strong>{autoSku || 'generating...'}</strong> ({autoId})
+            </div>
 
             {/* Section 1: Product Classification */}
             <div className="form-group" style={{ marginBottom: 12 }}>
               <label className="form-label" htmlFor="prod-name">
-                Product Name *
+                Product Name * <span style={{ fontSize: 11, color: 'var(--text3)' }}>({FIELD_LIMITS.PRODUCT.NAME_MIN}–{FIELD_LIMITS.PRODUCT.NAME_MAX} chars)</span>
               </label>
               <input
                 id="prod-name"
@@ -144,10 +158,16 @@ export default function AddProductModal({
                 className={`form-input ${errors.name ? 'input-error' : ''}`}
                 placeholder="e.g. Organic Cow Ghee 500ml"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                maxLength={FIELD_LIMITS.PRODUCT.NAME_MAX}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  clearFieldError('name');
+                }}
+                aria-invalid={Boolean(errors.name)}
+                aria-describedby={errors.name ? 'prod-name-err' : undefined}
                 autoFocus
               />
-              {errors.name && <span className="field-error">{errors.name}</span>}
+              {errors.name && <span id="prod-name-err" className="field-error">{errors.name}</span>}
             </div>
 
             <div className="form-grid-2" style={{ marginBottom: 14 }}>
@@ -168,7 +188,10 @@ export default function AddProductModal({
                     className="form-input"
                     style={{ flex: 1 }}
                     value={supplierId}
-                    onChange={(e) => setSupplierId(e.target.value)}
+                    onChange={(e) => {
+                      setSupplierId(e.target.value);
+                      clearFieldError('supplierId');
+                    }}
                   >
                     {suppliers.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -177,6 +200,7 @@ export default function AddProductModal({
                     ))}
                   </select>
                 </div>
+                {errors.supplierId && <span className="field-error">{errors.supplierId}</span>}
               </div>
 
               <div className="form-group">
@@ -190,6 +214,7 @@ export default function AddProductModal({
                   onChange={(e) => {
                     setCategory(e.target.value);
                     if (e.target.value !== '__custom__') setCustomCategory('');
+                    clearFieldError('category');
                   }}
                 >
                   {categories.map((c) => (
@@ -203,10 +228,14 @@ export default function AddProductModal({
                   <input
                     type="text"
                     style={{ marginTop: 6 }}
-                    className="form-input"
+                    className={`form-input ${errors.category ? 'input-error' : ''}`}
                     placeholder="Enter category name"
                     value={customCategory}
-                    onChange={(e) => setCustomCategory(e.target.value)}
+                    maxLength={FIELD_LIMITS.PRODUCT.CATEGORY_MAX}
+                    onChange={(e) => {
+                      setCustomCategory(e.target.value);
+                      clearFieldError('category');
+                    }}
                   />
                 )}
                 {errors.category && <span className="field-error">{errors.category}</span>}
@@ -223,10 +252,15 @@ export default function AddProductModal({
                 <input
                   id="prod-stock"
                   type="number"
-                  min="0"
+                  min={FIELD_LIMITS.PRODUCT.STOCK_MIN}
+                  max={FIELD_LIMITS.PRODUCT.STOCK_MAX}
                   className={`form-input ${errors.currentStock ? 'input-error' : ''}`}
                   value={currentStock}
-                  onChange={(e) => setCurrentStock(e.target.value)}
+                  onChange={(e) => {
+                    setCurrentStock(e.target.value);
+                    clearFieldError('currentStock');
+                  }}
+                  aria-invalid={Boolean(errors.currentStock)}
                 />
                 {errors.currentStock && <span className="field-error">{errors.currentStock}</span>}
               </div>
@@ -238,10 +272,15 @@ export default function AddProductModal({
                 <input
                   id="prod-target"
                   type="number"
-                  min="0"
+                  min={FIELD_LIMITS.PRODUCT.TARGET_MIN}
+                  max={FIELD_LIMITS.PRODUCT.TARGET_MAX}
                   className={`form-input ${errors.safetyTarget ? 'input-error' : ''}`}
                   value={safetyTarget}
-                  onChange={(e) => setSafetyTarget(e.target.value)}
+                  onChange={(e) => {
+                    setSafetyTarget(e.target.value);
+                    clearFieldError('safetyTarget');
+                  }}
+                  aria-invalid={Boolean(errors.safetyTarget)}
                 />
                 {errors.safetyTarget && <span className="field-error">{errors.safetyTarget}</span>}
               </div>
@@ -253,11 +292,16 @@ export default function AddProductModal({
                 <input
                   id="prod-price"
                   type="number"
-                  step="0.5"
-                  min="0"
+                  step="0.01"
+                  min={FIELD_LIMITS.PRODUCT.PRICE_MIN}
+                  max={FIELD_LIMITS.PRODUCT.PRICE_MAX}
                   className={`form-input ${errors.unitCost ? 'input-error' : ''}`}
                   value={unitCost}
-                  onChange={(e) => setUnitCost(e.target.value)}
+                  onChange={(e) => {
+                    setUnitCost(e.target.value);
+                    clearFieldError('unitCost');
+                  }}
+                  aria-invalid={Boolean(errors.unitCost)}
                 />
                 {errors.unitCost && <span className="field-error">{errors.unitCost}</span>}
               </div>
@@ -269,11 +313,17 @@ export default function AddProductModal({
                 <input
                   id="prod-qty"
                   type="number"
-                  min="0"
-                  className="form-input"
+                  min={FIELD_LIMITS.PRODUCT.QTY_MIN}
+                  max={FIELD_LIMITS.PRODUCT.QTY_MAX}
+                  className={`form-input ${errors.orderQty ? 'input-error' : ''}`}
                   value={orderQty}
-                  onChange={(e) => setOrderQty(e.target.value)}
+                  onChange={(e) => {
+                    setOrderQty(e.target.value);
+                    clearFieldError('orderQty');
+                  }}
+                  aria-invalid={Boolean(errors.orderQty)}
                 />
+                {errors.orderQty && <span className="field-error">{errors.orderQty}</span>}
               </div>
             </div>
           </div>

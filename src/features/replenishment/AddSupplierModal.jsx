@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createSupplier } from '../../db/queries.js';
+import { validateSupplierForm, FIELD_LIMITS } from '../../utils/validation.js';
 
 export default function AddSupplierModal({
   isOpen,
@@ -20,21 +21,33 @@ export default function AddSupplierModal({
 
   if (!isOpen) return null;
 
+  const clearFieldError = (field) => {
+    if (errors[field] || errors.form) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        delete next.form;
+        return next;
+      });
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const newErrors = {};
 
-    if (!name.trim()) newErrors.name = 'Supplier name is required.';
-    if (!category.trim()) newErrors.category = 'Primary category is required.';
+    const validation = validateSupplierForm({
+      name,
+      category,
+      targetMoq,
+      unitThreshold,
+      contactRep,
+      contactEmail,
+      contactPhone,
+      leadTime,
+    });
 
-    const moq = parseFloat(targetMoq);
-    const units = parseInt(unitThreshold, 10) || 0;
-
-    if (isNaN(moq) || moq < 0) newErrors.targetMoq = 'Must be a non-negative number.';
-    if (isNaN(units) || units < 0) newErrors.unitThreshold = 'Must be a non-negative number.';
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+    if (!validation.isValid) {
+      setErrors(validation.errors);
       return;
     }
 
@@ -48,8 +61,8 @@ export default function AddSupplierModal({
         contactEmail: contactEmail.trim(),
         contactPhone: contactPhone.trim(),
         leadTime: leadTime.trim() || '3d',
-        targetMoq: moq,
-        unitThreshold: units,
+        targetMoq: parseFloat(targetMoq),
+        unitThreshold: parseInt(unitThreshold, 10) || 0,
       });
 
       setIsSubmitting(false);
@@ -87,7 +100,7 @@ export default function AddSupplierModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <div className="filter-modal-body modal-form-body">
             {errors.form && (
               <div className="form-error-banner" role="alert">
@@ -98,32 +111,44 @@ export default function AddSupplierModal({
             <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label" htmlFor="sup-name">
-                  Supplier Name *
+                  Supplier Name * <span style={{ fontSize: 11, color: 'var(--text3)' }}>({FIELD_LIMITS.SUPPLIER.NAME_MIN}–{FIELD_LIMITS.SUPPLIER.NAME_MAX} chars)</span>
                 </label>
                 <input
                   id="sup-name"
                   type="text"
+                  maxLength={FIELD_LIMITS.SUPPLIER.NAME_MAX}
                   className={`form-input ${errors.name ? 'input-error' : ''}`}
                   placeholder="e.g. Amul Dairy & Foods"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    clearFieldError('name');
+                  }}
+                  aria-invalid={Boolean(errors.name)}
+                  aria-describedby={errors.name ? 'sup-name-err' : undefined}
                 />
-                {errors.name && <span className="field-error">{errors.name}</span>}
+                {errors.name && <span id="sup-name-err" className="field-error">{errors.name}</span>}
               </div>
 
               <div className="form-group">
                 <label className="form-label" htmlFor="sup-cat">
-                  Primary Category *
+                  Primary Category * <span style={{ fontSize: 11, color: 'var(--text3)' }}>({FIELD_LIMITS.SUPPLIER.CATEGORY_MIN}–{FIELD_LIMITS.SUPPLIER.CATEGORY_MAX} chars)</span>
                 </label>
                 <input
                   id="sup-cat"
                   type="text"
+                  maxLength={FIELD_LIMITS.SUPPLIER.CATEGORY_MAX}
                   className={`form-input ${errors.category ? 'input-error' : ''}`}
                   placeholder="e.g. Dairy & Frozen"
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => {
+                    setCategory(e.target.value);
+                    clearFieldError('category');
+                  }}
+                  aria-invalid={Boolean(errors.category)}
+                  aria-describedby={errors.category ? 'sup-cat-err' : undefined}
                 />
-                {errors.category && <span className="field-error">{errors.category}</span>}
+                {errors.category && <span id="sup-cat-err" className="field-error">{errors.category}</span>}
               </div>
             </div>
 
@@ -135,13 +160,19 @@ export default function AddSupplierModal({
                 <input
                   id="sup-moq"
                   type="number"
-                  min="0"
+                  min={FIELD_LIMITS.SUPPLIER.MOQ_MIN}
+                  max={FIELD_LIMITS.SUPPLIER.MOQ_MAX}
                   className={`form-input ${errors.targetMoq ? 'input-error' : ''}`}
                   placeholder="e.g. 10000"
                   value={targetMoq}
-                  onChange={(e) => setTargetMoq(e.target.value)}
+                  onChange={(e) => {
+                    setTargetMoq(e.target.value);
+                    clearFieldError('targetMoq');
+                  }}
+                  aria-invalid={Boolean(errors.targetMoq)}
+                  aria-describedby={errors.targetMoq ? 'sup-moq-err' : undefined}
                 />
-                {errors.targetMoq && <span className="field-error">{errors.targetMoq}</span>}
+                {errors.targetMoq && <span id="sup-moq-err" className="field-error">{errors.targetMoq}</span>}
               </div>
 
               <div className="form-group">
@@ -151,12 +182,19 @@ export default function AddSupplierModal({
                 <input
                   id="sup-unit-thresh"
                   type="number"
-                  min="0"
-                  className="form-input"
+                  min={FIELD_LIMITS.SUPPLIER.UNITS_MIN}
+                  max={FIELD_LIMITS.SUPPLIER.UNITS_MAX}
+                  className={`form-input ${errors.unitThreshold ? 'input-error' : ''}`}
                   placeholder="e.g. 40 (0 for no threshold)"
                   value={unitThreshold}
-                  onChange={(e) => setUnitThreshold(e.target.value)}
+                  onChange={(e) => {
+                    setUnitThreshold(e.target.value);
+                    clearFieldError('unitThreshold');
+                  }}
+                  aria-invalid={Boolean(errors.unitThreshold)}
+                  aria-describedby={errors.unitThreshold ? 'sup-unit-err' : undefined}
                 />
+                {errors.unitThreshold && <span id="sup-unit-err" className="field-error">{errors.unitThreshold}</span>}
               </div>
             </div>
 
@@ -182,11 +220,17 @@ export default function AddSupplierModal({
                 <input
                   id="sup-email"
                   type="email"
-                  className="form-input"
+                  className={`form-input ${errors.contactEmail ? 'input-error' : ''}`}
                   placeholder="e.g. orders@amul.com"
                   value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
+                  onChange={(e) => {
+                    setContactEmail(e.target.value);
+                    clearFieldError('contactEmail');
+                  }}
+                  aria-invalid={Boolean(errors.contactEmail)}
+                  aria-describedby={errors.contactEmail ? 'sup-email-err' : undefined}
                 />
+                {errors.contactEmail && <span id="sup-email-err" className="field-error">{errors.contactEmail}</span>}
               </div>
 
               <div className="form-group">
@@ -196,26 +240,39 @@ export default function AddSupplierModal({
                 <input
                   id="sup-phone"
                   type="text"
-                  className="form-input"
+                  className={`form-input ${errors.contactPhone ? 'input-error' : ''}`}
                   placeholder="e.g. +91 98765 43210"
                   value={contactPhone}
-                  onChange={(e) => setContactPhone(e.target.value)}
+                  onChange={(e) => {
+                    setContactPhone(e.target.value);
+                    clearFieldError('contactPhone');
+                  }}
+                  aria-invalid={Boolean(errors.contactPhone)}
+                  aria-describedby={errors.contactPhone ? 'sup-phone-err' : undefined}
                 />
+                {errors.contactPhone && <span id="sup-phone-err" className="field-error">{errors.contactPhone}</span>}
               </div>
             </div>
 
             <div className="form-group">
               <label className="form-label" htmlFor="sup-lead">
-                Expected Lead Time
+                Expected Lead Time <span style={{ fontSize: 11, color: 'var(--text3)' }}>(max {FIELD_LIMITS.SUPPLIER.LEAD_TIME_MAX} chars)</span>
               </label>
               <input
                 id="sup-lead"
                 type="text"
-                className="form-input"
+                maxLength={FIELD_LIMITS.SUPPLIER.LEAD_TIME_MAX}
+                className={`form-input ${errors.leadTime ? 'input-error' : ''}`}
                 placeholder="e.g. 2d or 48 hours"
                 value={leadTime}
-                onChange={(e) => setLeadTime(e.target.value)}
+                onChange={(e) => {
+                  setLeadTime(e.target.value);
+                  clearFieldError('leadTime');
+                }}
+                aria-invalid={Boolean(errors.leadTime)}
+                aria-describedby={errors.leadTime ? 'sup-lead-err' : undefined}
               />
+              {errors.leadTime && <span id="sup-lead-err" className="field-error">{errors.leadTime}</span>}
             </div>
           </div>
 

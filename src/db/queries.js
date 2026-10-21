@@ -1,7 +1,13 @@
-import { getDatabase, runQuery, runExecute, runTransaction, schedulePersistence } from './database.js';
+import { runQuery, runExecute, runTransaction } from './database.js';
 import { SEED_SUPPLIERS, SEED_PRODUCTS, SEED_MANIFESTS, SEED_PURCHASE_ORDERS } from './seed.js';
 
 import { calculatePriority } from '../utils/priorityRules.js';
+import {
+  validateOrderQtyInput,
+  validateProductForm,
+  validateSupplierForm,
+  validateBulkEditParams,
+} from '../utils/validation.js';
 export { calculatePriority };
 
 // ── Suppliers ──────────────────────────────────────────────────────────────
@@ -67,8 +73,11 @@ export async function fetchInventory(supplierId) {
 }
 
 export async function updateItemOrderQty(sku, quantity) {
-  const validQty = Math.max(0, parseInt(quantity, 10) || 0);
-  const selected = validQty > 0 ? 1 : 0;
+  const check = validateOrderQtyInput(quantity);
+  if (!check.isValid) {
+    throw new Error(check.error || 'Invalid order quantity.');
+  }
+  const validQty = check.value;
   await runExecute(`
     UPDATE inventory_items
     SET order_qty = ?, selected = CASE WHEN ? > 0 THEN 1 ELSE selected END
@@ -341,7 +350,6 @@ export async function deletePurchaseOrder(poId) {
 
 // Reset database to initial sample data
 export async function resetDatabaseToDefaults() {
-  const db = await getDatabase();
   return runTransaction((db) => {
     db.exec(`
       DELETE FROM purchase_order_items;
@@ -497,6 +505,11 @@ export async function getNextProductIdentifiers(supplierId) {
 
 // ── Create Product ──────────────────────────────────────────────────────────
 export async function createProduct(productData) {
+  const validation = validateProductForm(productData);
+  if (!validation.isValid) {
+    throw new Error(Object.values(validation.errors).join(' '));
+  }
+
   const {
     name,
     supplierId,
@@ -507,19 +520,10 @@ export async function createProduct(productData) {
     orderQty = 0,
   } = productData;
 
-  if (!name?.trim()) throw new Error('Product name is required.');
-  if (!supplierId?.trim()) throw new Error('Supplier is required.');
-  if (!category?.trim()) throw new Error('Category is required.');
-
   const parsedStock = parseInt(currentStock, 10);
   const parsedTarget = parseInt(safetyTarget, 10);
   const parsedCost = parseFloat(unitCost);
   const parsedQty = parseInt(orderQty, 10) || 0;
-
-  if (isNaN(parsedStock) || parsedStock < 0) throw new Error('Current stock must be a non-negative number.');
-  if (isNaN(parsedTarget) || parsedTarget < 0) throw new Error('Safety target must be a non-negative number.');
-  if (isNaN(parsedCost) || parsedCost < 0) throw new Error('Unit price must be a non-negative number.');
-  if (parsedQty < 0) throw new Error('Order quantity must be a non-negative number.');
 
   // Automatically assign unique ID and SKU based on database if not provided
   let cleanId = productData.id?.trim();
@@ -578,6 +582,11 @@ export async function createProduct(productData) {
 
 // ── Create Supplier ─────────────────────────────────────────────────────────
 export async function createSupplier(supplierData) {
+  const validation = validateSupplierForm(supplierData);
+  if (!validation.isValid) {
+    throw new Error(Object.values(validation.errors).join(' '));
+  }
+
   const {
     name,
     category,
@@ -589,14 +598,8 @@ export async function createSupplier(supplierData) {
     unitThreshold = 0,
   } = supplierData;
 
-  if (!name?.trim()) throw new Error('Supplier name is required.');
-  if (!category?.trim()) throw new Error('Supplier category is required.');
-
   const parsedMoq = parseFloat(targetMoq);
   const parsedUnits = parseInt(unitThreshold, 10) || 0;
-  if (isNaN(parsedMoq) || parsedMoq < 0) throw new Error('Minimum order value must be non-negative.');
-  if (parsedUnits < 0) throw new Error('Unit threshold must be non-negative.');
-
   const cleanName = name.trim();
 
   // Enforce normalized unique supplier name
@@ -648,6 +651,10 @@ export async function createSupplier(supplierData) {
 // ── Bulk Update Inventory ───────────────────────────────────────────────────
 export async function bulkUpdateInventory(itemIds, updates) {
   if (!Array.isArray(itemIds) || itemIds.length === 0) return 0;
+  const validation = validateBulkEditParams(updates);
+  if (!validation.isValid) {
+    throw new Error(Object.values(validation.errors).join(' '));
+  }
 
   return runTransaction((db) => {
     // 1. If category update requested

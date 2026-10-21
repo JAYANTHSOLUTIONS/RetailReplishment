@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { validateBulkEditParams, FIELD_LIMITS } from '../../utils/validation.js';
 
 export default function BulkEditModal({
   isOpen,
@@ -17,7 +18,7 @@ export default function BulkEditModal({
   const [enableCategory, setEnableCategory] = useState(false);
   const [categoryValue, setCategoryValue] = useState(categories[0] || '');
 
-  const [errorMsg, setErrorMsg] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Separate eligible (non-ordered) from ineligible (already ordered) products
@@ -32,57 +33,63 @@ export default function BulkEditModal({
 
   if (!isOpen) return null;
 
+  const clearFieldError = (key) => {
+    if (fieldErrors[key] || fieldErrors.form) {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        delete next.form;
+        return next;
+      });
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setErrorMsg('');
 
-    if (!enableOrderQty && !enableSafetyTarget && !enableCategory) {
-      setErrorMsg('Please select at least one field to update.');
+    const validation = validateBulkEditParams({
+      enableOrderQty,
+      orderQtyMode,
+      orderQtyValue,
+      enableSafetyTarget,
+      safetyTargetValue,
+      enableCategory,
+      categoryValue,
+    });
+
+    if (!validation.isValid) {
+      setFieldErrors(validation.errors);
       return;
     }
 
     const updates = {};
-
     if (enableOrderQty) {
       if (orderQtyMode !== 'deficit') {
-        const val = parseInt(orderQtyValue, 10);
-        if (isNaN(val) || (orderQtyMode === 'set' && val < 0)) {
-          setErrorMsg('Please enter a valid non-negative order quantity.');
-          return;
-        }
         updates.orderQtyMode = orderQtyMode;
-        updates.orderQtyValue = val;
+        updates.orderQtyValue = parseInt(orderQtyValue, 10);
       } else {
         updates.orderQtyMode = 'deficit';
       }
     }
 
     if (enableSafetyTarget) {
-      const tgt = parseInt(safetyTargetValue, 10);
-      if (isNaN(tgt) || tgt < 0) {
-        setErrorMsg('Safety target must be a non-negative number.');
-        return;
-      }
-      updates.safetyTarget = tgt;
+      updates.safetyTarget = parseInt(safetyTargetValue, 10);
     }
 
     if (enableCategory) {
-      if (!categoryValue?.trim()) {
-        setErrorMsg('Please select or specify a category.');
-        return;
-      }
       updates.category = categoryValue.trim();
     }
 
     try {
       setIsSubmitting(true);
+      setFieldErrors({});
       const targetIds = selectedProducts.map((p) => p.id);
       await onApplyBulkEdit(targetIds, updates);
       setIsSubmitting(false);
       onClose();
     } catch (err) {
       setIsSubmitting(false);
-      setErrorMsg(err.message || 'Failed to apply bulk updates to SQLite.');
+      setFieldErrors({ form: err.message || 'Failed to apply bulk updates to SQLite.' });
     }
   };
 
@@ -110,7 +117,7 @@ export default function BulkEditModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <div className="filter-modal-body bulk-edit-body">
             {/* Warning if any ordered items are in the selection */}
             {orderedCount > 0 && (
@@ -122,9 +129,9 @@ export default function BulkEditModal({
               </div>
             )}
 
-            {errorMsg && (
+            {fieldErrors.form && (
               <div className="form-error-banner" role="alert">
-                {errorMsg}
+                {fieldErrors.form}
               </div>
             )}
 
@@ -140,7 +147,10 @@ export default function BulkEditModal({
                     type="checkbox"
                     className="cb"
                     checked={enableOrderQty}
-                    onChange={(e) => setEnableOrderQty(e.target.checked)}
+                    onChange={(e) => {
+                      setEnableOrderQty(e.target.checked);
+                      clearFieldError('orderQty');
+                    }}
                   />
                   <span className="bulk-field-label">Update Order Quantity</span>
                   {orderedCount > 0 && (
@@ -157,9 +167,12 @@ export default function BulkEditModal({
                           name="qtyMode"
                           value="set"
                           checked={orderQtyMode === 'set'}
-                          onChange={() => setOrderQtyMode('set')}
+                          onChange={() => {
+                            setOrderQtyMode('set');
+                            clearFieldError('orderQty');
+                          }}
                         />
-                        <span>Set exact quantity to:</span>
+                        <span>Set exact quantity to ({FIELD_LIMITS.BULK.QTY_SET_MIN}–{FIELD_LIMITS.BULK.QTY_SET_MAX.toLocaleString()}):</span>
                       </label>
                       <label className="bulk-radio-label">
                         <input
@@ -167,9 +180,12 @@ export default function BulkEditModal({
                           name="qtyMode"
                           value="increase"
                           checked={orderQtyMode === 'increase'}
-                          onChange={() => setOrderQtyMode('increase')}
+                          onChange={() => {
+                            setOrderQtyMode('increase');
+                            clearFieldError('orderQty');
+                          }}
                         />
-                        <span>Increase current quantity by:</span>
+                        <span>Increase current quantity by ({FIELD_LIMITS.BULK.QTY_INCREASE_MIN}–{FIELD_LIMITS.BULK.QTY_INCREASE_MAX.toLocaleString()}):</span>
                       </label>
                       <label className="bulk-radio-label">
                         <input
@@ -177,7 +193,10 @@ export default function BulkEditModal({
                           name="qtyMode"
                           value="deficit"
                           checked={orderQtyMode === 'deficit'}
-                          onChange={() => setOrderQtyMode('deficit')}
+                          onChange={() => {
+                            setOrderQtyMode('deficit');
+                            clearFieldError('orderQty');
+                          }}
                         />
                         <span>Set to calculated replenishment deficit (Target − Stock)</span>
                       </label>
@@ -187,14 +206,24 @@ export default function BulkEditModal({
                       <div className="bulk-input-row">
                         <input
                           type="number"
-                          min="0"
+                          min={orderQtyMode === 'increase' ? FIELD_LIMITS.BULK.QTY_INCREASE_MIN : FIELD_LIMITS.BULK.QTY_SET_MIN}
+                          max={orderQtyMode === 'increase' ? FIELD_LIMITS.BULK.QTY_INCREASE_MAX : FIELD_LIMITS.BULK.QTY_SET_MAX}
                           value={orderQtyValue}
-                          onChange={(e) => setOrderQtyValue(e.target.value)}
-                          className="form-input bulk-num-input"
+                          onChange={(e) => {
+                            setOrderQtyValue(e.target.value);
+                            clearFieldError('orderQty');
+                          }}
+                          className={`form-input bulk-num-input ${fieldErrors.orderQty ? 'input-error' : ''}`}
                           placeholder="e.g. 50"
+                          aria-invalid={Boolean(fieldErrors.orderQty)}
                         />
                         <span className="bulk-unit-label">units</span>
                       </div>
+                    )}
+                    {fieldErrors.orderQty && (
+                      <span className="field-error" style={{ marginTop: 4, display: 'block' }}>
+                        {fieldErrors.orderQty}
+                      </span>
                     )}
                   </div>
                 )}
@@ -207,7 +236,10 @@ export default function BulkEditModal({
                     type="checkbox"
                     className="cb"
                     checked={enableSafetyTarget}
-                    onChange={(e) => setEnableSafetyTarget(e.target.checked)}
+                    onChange={(e) => {
+                      setEnableSafetyTarget(e.target.checked);
+                      clearFieldError('safetyTarget');
+                    }}
                   />
                   <span className="bulk-field-label">Update Safety Target</span>
                 </label>
@@ -217,14 +249,24 @@ export default function BulkEditModal({
                     <div className="bulk-input-row">
                       <input
                         type="number"
-                        min="0"
+                        min={FIELD_LIMITS.BULK.TARGET_MIN}
+                        max={FIELD_LIMITS.BULK.TARGET_MAX}
                         value={safetyTargetValue}
-                        onChange={(e) => setSafetyTargetValue(e.target.value)}
-                        className="form-input bulk-num-input"
+                        onChange={(e) => {
+                          setSafetyTargetValue(e.target.value);
+                          clearFieldError('safetyTarget');
+                        }}
+                        className={`form-input bulk-num-input ${fieldErrors.safetyTarget ? 'input-error' : ''}`}
                         placeholder="e.g. 60"
+                        aria-invalid={Boolean(fieldErrors.safetyTarget)}
                       />
                       <span className="bulk-unit-label">units</span>
                     </div>
+                    {fieldErrors.safetyTarget && (
+                      <span className="field-error" style={{ marginTop: 4, display: 'block' }}>
+                        {fieldErrors.safetyTarget}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -236,7 +278,10 @@ export default function BulkEditModal({
                     type="checkbox"
                     className="cb"
                     checked={enableCategory}
-                    onChange={(e) => setEnableCategory(e.target.checked)}
+                    onChange={(e) => {
+                      setEnableCategory(e.target.checked);
+                      clearFieldError('category');
+                    }}
                   />
                   <span className="bulk-field-label">Change Category</span>
                 </label>
@@ -244,9 +289,13 @@ export default function BulkEditModal({
                 {enableCategory && (
                   <div className="bulk-field-options">
                     <select
-                      className="form-input"
+                      className={`form-input ${fieldErrors.category ? 'input-error' : ''}`}
                       value={categoryValue}
-                      onChange={(e) => setCategoryValue(e.target.value)}
+                      onChange={(e) => {
+                        setCategoryValue(e.target.value);
+                        clearFieldError('category');
+                      }}
+                      aria-invalid={Boolean(fieldErrors.category)}
                     >
                       {categories.map((cat) => (
                         <option key={cat} value={cat}>
@@ -254,6 +303,11 @@ export default function BulkEditModal({
                         </option>
                       ))}
                     </select>
+                    {fieldErrors.category && (
+                      <span className="field-error" style={{ marginTop: 4, display: 'block' }}>
+                        {fieldErrors.category}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

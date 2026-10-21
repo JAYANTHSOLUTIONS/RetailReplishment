@@ -1,7 +1,6 @@
 // src/features/replenishment/Filters.jsx
 // Filter bar: supplier dropdown, status filter, search by SKU / name.
 
-import React from 'react';
 import { Select, Input } from '../../components/ui';
 
 export default function Filters({ filters, onChange }) {
