@@ -1,7 +1,14 @@
 import { useState, useEffect } from 'react';
 import { createProduct, getNextProductIdentifiers } from '../../db/queries.js';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
-import { validateProductForm, FIELD_LIMITS } from '../../utils/validation.js';
+import {
+  validateProductForm,
+  FIELD_LIMITS,
+  sanitizePriceInput,
+  sanitizeIntegerInput,
+  handleAlphaOnlyKeyDown,
+  sanitizeAlphaName,
+} from '../../utils/validation.js';
 
 export default function AddProductModal({
   isOpen,
@@ -49,8 +56,6 @@ export default function AddProductModal({
       active = false;
     };
   }, [isOpen, supplierId]);
-
-  if (!isOpen) return null;
 
   const clearFieldError = (field) => {
     if (errors[field] || errors.form) {
@@ -112,40 +117,42 @@ export default function AddProductModal({
 
   return (
     <div
-      className="confirm-modal-overlay"
+      className={`modal-overlay fade-toggle ${isOpen ? 'open' : ''}`}
       role="dialog"
       aria-modal="true"
+      inert={!isOpen ? true : undefined}
       aria-labelledby="add-product-modal-title"
       onClick={onClose}
     >
-      <div className="filter-modal-card add-product-card" onClick={(e) => e.stopPropagation()}>
-        <div className="info-modal-header">
-          <div className="filter-modal-title-wrap">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-            </svg>
-            <h2 id="add-product-modal-title" className="info-modal-title">
-              Add New Inventory Product
-            </h2>
+      <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-content add-product-card">
+          <div className="modal-header info-modal-header">
+            <div className="modal-title info-modal-title">
+              {/* <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+              </svg> */}
+              <h2 id="add-product-modal-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
+                Add New Inventory Product
+              </h2>
+            </div>
+            {/* <button className="modal-close-btn info-modal-close" onClick={onClose} aria-label="Close modal">
+              ✕
+            </button> */}
           </div>
-          <button className="info-modal-close" onClick={onClose} aria-label="Close modal">
-            ✕
-          </button>
-        </div>
 
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="filter-modal-body modal-form-body">
-            {errors.form && (
-              <div className="form-error-banner" role="alert">
-                {errors.form}
-              </div>
-            )}
+          <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <div className="modal-body filter-modal-body modal-form-body">
+              {errors.form && (
+                <div className="form-error-banner" role="alert">
+                  {errors.form}
+                </div>
+              )}
 
             {/* Auto ID Notice */}
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
+            {/* <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
               Auto ID Assignment: Next available SKU is <strong>{autoSku || 'generating...'}</strong> ({autoId})
-            </div>
+            </div> */}
 
             {/* Section 1: Product Classification */}
             <div className="form-group" style={{ marginBottom: 12 }}>
@@ -156,11 +163,12 @@ export default function AddProductModal({
                 id="prod-name"
                 type="text"
                 className={`form-input ${errors.name ? 'input-error' : ''}`}
-                placeholder="e.g. Organic Cow Ghee 500ml"
+                placeholder="e.g. Organic Cow Ghee"
                 value={name}
                 maxLength={FIELD_LIMITS.PRODUCT.NAME_MAX}
+                onKeyDown={handleAlphaOnlyKeyDown}
                 onChange={(e) => {
-                  setName(e.target.value);
+                  setName(sanitizeAlphaName(e.target.value));
                   clearFieldError('name');
                 }}
                 aria-invalid={Boolean(errors.name)}
@@ -232,8 +240,9 @@ export default function AddProductModal({
                     placeholder="Enter category name"
                     value={customCategory}
                     maxLength={FIELD_LIMITS.PRODUCT.CATEGORY_MAX}
+                    onKeyDown={handleAlphaOnlyKeyDown}
                     onChange={(e) => {
-                      setCustomCategory(e.target.value);
+                      setCustomCategory(sanitizeAlphaName(e.target.value));
                       clearFieldError('category');
                     }}
                   />
@@ -257,7 +266,7 @@ export default function AddProductModal({
                   className={`form-input ${errors.currentStock ? 'input-error' : ''}`}
                   value={currentStock}
                   onChange={(e) => {
-                    setCurrentStock(e.target.value);
+                    setCurrentStock(sanitizeIntegerInput(e.target.value));
                     clearFieldError('currentStock');
                   }}
                   aria-invalid={Boolean(errors.currentStock)}
@@ -271,13 +280,12 @@ export default function AddProductModal({
                 </label>
                 <input
                   id="prod-target"
-                  type="number"
-                  min={FIELD_LIMITS.PRODUCT.TARGET_MIN}
-                  max={FIELD_LIMITS.PRODUCT.TARGET_MAX}
+                  type="text"
+                  inputMode="numeric"
                   className={`form-input ${errors.safetyTarget ? 'input-error' : ''}`}
                   value={safetyTarget}
                   onChange={(e) => {
-                    setSafetyTarget(e.target.value);
+                    setSafetyTarget(sanitizeIntegerInput(e.target.value));
                     clearFieldError('safetyTarget');
                   }}
                   aria-invalid={Boolean(errors.safetyTarget)}
@@ -291,14 +299,12 @@ export default function AddProductModal({
                 </label>
                 <input
                   id="prod-price"
-                  type="number"
-                  step="0.01"
-                  min={FIELD_LIMITS.PRODUCT.PRICE_MIN}
-                  max={FIELD_LIMITS.PRODUCT.PRICE_MAX}
+                  type="text"
+                  inputMode="decimal"
                   className={`form-input ${errors.unitCost ? 'input-error' : ''}`}
                   value={unitCost}
                   onChange={(e) => {
-                    setUnitCost(e.target.value);
+                    setUnitCost(sanitizePriceInput(e.target.value));
                     clearFieldError('unitCost');
                   }}
                   aria-invalid={Boolean(errors.unitCost)}
@@ -312,13 +318,12 @@ export default function AddProductModal({
                 </label>
                 <input
                   id="prod-qty"
-                  type="number"
-                  min={FIELD_LIMITS.PRODUCT.QTY_MIN}
-                  max={FIELD_LIMITS.PRODUCT.QTY_MAX}
+                  type="text"
+                  inputMode="numeric"
                   className={`form-input ${errors.orderQty ? 'input-error' : ''}`}
                   value={orderQty}
                   onChange={(e) => {
-                    setOrderQty(e.target.value);
+                    setOrderQty(sanitizeIntegerInput(e.target.value, 5));
                     clearFieldError('orderQty');
                   }}
                   aria-invalid={Boolean(errors.orderQty)}
@@ -328,7 +333,7 @@ export default function AddProductModal({
             </div>
           </div>
 
-          <div className="filter-modal-footer">
+          <div className="modal-footer filter-modal-footer">
             <button type="button" className="btn-cancel" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </button>
@@ -339,5 +344,6 @@ export default function AddProductModal({
         </form>
       </div>
     </div>
+  </div>
   );
 }

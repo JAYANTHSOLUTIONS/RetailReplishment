@@ -6,6 +6,8 @@ import {
   validateSupplierForm,
   validateBulkEditParams,
   validateSupplierMoq,
+  handleAlphaOnlyKeyDown,
+  sanitizeAlphaName,
 } from '../src/utils/index.js';
 import { matchesFilters } from '../src/utils/filterRules.js';
 
@@ -71,17 +73,58 @@ assert(dupIdSup.isValid === false && dupIdSup.errors.supplierId.includes('alread
 const invalidEmailSup = validateSupplierForm({ name: 'Fresh Foods', targetMoq: '1000', unitThreshold: '10', contactEmail: 'not-an-email' }, existingSuppliers);
 assert(invalidEmailSup.isValid === false && invalidEmailSup.errors.contactEmail !== undefined, 'Invalid email rejected');
 
+// Strict Name & Email Rules
+const leadingNumProd = validateProductForm({ name: '123 Organic Bread', category: 'Bakery', currentStock: '10', safetyTarget: '20', unitCost: '15' }, existingProducts);
+assert(leadingNumProd.isValid === false && Boolean(leadingNumProd.errors.name), 'Product name starting with number rejected');
+
+const containsNumProd = validateProductForm({ name: 'Organic Bread 2', category: 'Bakery', currentStock: '10', safetyTarget: '20', unitCost: '15' }, existingProducts);
+assert(containsNumProd.isValid === false && Boolean(containsNumProd.errors.name), 'Product name containing numbers rejected');
+
+const leadingNumSup = validateSupplierForm({ name: '123 Heritage Dairy', targetMoq: '1000' }, existingSuppliers);
+assert(leadingNumSup.isValid === false && Boolean(leadingNumSup.errors.name), 'Supplier name starting with number rejected');
+
+const containsNumSup = validateSupplierForm({ name: 'Heritage Dairy 2', targetMoq: '1000' }, existingSuppliers);
+assert(containsNumSup.isValid === false && Boolean(containsNumSup.errors.name), 'Supplier name containing numbers rejected');
+
+const leadingNumRep = validateSupplierForm({ name: 'Heritage Dairy', targetMoq: '1000', contactRep: '1Rajesh' }, existingSuppliers);
+assert(leadingNumRep.isValid === false && Boolean(leadingNumRep.errors.contactRep), 'Representative name starting with number rejected');
+
+const containsNumRep = validateSupplierForm({ name: 'Heritage Dairy', targetMoq: '1000', contactRep: 'Rajesh 2' }, existingSuppliers);
+assert(containsNumRep.isValid === false && Boolean(containsNumRep.errors.contactRep), 'Representative name containing numbers rejected');
+
+const leadingNumEmail = validateSupplierForm({ name: 'Heritage Dairy', targetMoq: '1000', contactEmail: '123orders@heritage.com' }, existingSuppliers);
+assert(leadingNumEmail.isValid === false && Boolean(leadingNumEmail.errors.contactEmail), 'Email starting with number rejected');
+
+const shortAlphaEmail = validateSupplierForm({ name: 'Heritage Dairy', targetMoq: '1000', contactEmail: 'abc1@heritage.com' }, existingSuppliers);
+assert(shortAlphaEmail.isValid === false && Boolean(shortAlphaEmail.errors.contactEmail), 'Email with fewer than 4 alpha before numbers rejected');
+
+const validAlphaNumEmail = validateSupplierForm({ name: 'Heritage Dairy', category: 'Dairy', targetMoq: '1000', contactEmail: 'supp123@heritage.com' }, existingSuppliers);
+assert(validAlphaNumEmail.isValid === true, 'Email with at least 4 alpha then numbers accepted');
+
 const validSup = validateSupplierForm({
   name: 'Organic Mills',
   category: 'Organic Goods',
-  targetMoq: '15000',
+  targetMoq: '5000',
   unitThreshold: '50',
   contactRep: 'Ramesh',
   contactEmail: 'ramesh@organic.in',
-  contactPhone: '+91 98765 43210',
+  contactPhone: '+919876543210',
   leadTime: '3 business days'
 }, existingSuppliers);
 assert(validSup.isValid === true, 'Valid supplier form accepted');
+
+// 3b. Phone & Sanitizer Validation
+import { sanitizeMobileInput, sanitizePriceInput, sanitizeIntegerInput } from '../src/utils/validation.js';
+
+assert(sanitizeMobileInput('abc+12345xyz') === '+12345', 'Sanitize mobile strips letters and keeps valid +');
+assert(sanitizeMobileInput('+1234567890123456789') === '+12345678901234', 'Sanitize mobile enforces max 15 characters');
+assert(sanitizeMobileInput('9876543210') === '9876543210', 'Sanitize mobile allows plain digits');
+
+assert(sanitizePriceInput('12.345') === '12.34', 'Sanitize price limits to 2 decimal places');
+assert(sanitizePriceInput('-45.99') === '45.99', 'Sanitize price strips negative sign');
+assert(sanitizePriceInput('abc15.50') === '15.50', 'Sanitize price strips non-numeric characters');
+
+assert(sanitizeIntegerInput('123abc456', 5) === '12345', 'Sanitize integer strips non-digits and truncates to max length');
 
 // 4. Bulk Edit Validation
 const invalidBulk = validateBulkEditParams({
@@ -102,6 +145,26 @@ const validBulk = validateBulkEditParams({
   safetyTargetValue: '500'
 });
 assert(validBulk.isValid === true, 'Valid bulk edit parameters accepted');
+
+// 9. Testing Alpha Name Key Down & Sanitizer
+let prevented = false;
+handleAlphaOnlyKeyDown({ key: '5', ctrlKey: false, metaKey: false, altKey: false, preventDefault: () => { prevented = true; } });
+assert(prevented === true, 'handleAlphaOnlyKeyDown prevents typing digit 5');
+
+let letterPrevented = false;
+handleAlphaOnlyKeyDown({ key: 'a', ctrlKey: false, metaKey: false, altKey: false, preventDefault: () => { letterPrevented = true; } });
+assert(letterPrevented === false, 'handleAlphaOnlyKeyDown allows letter a');
+
+let spacePrevented = false;
+handleAlphaOnlyKeyDown({ key: ' ', ctrlKey: false, metaKey: false, altKey: false, preventDefault: () => { spacePrevented = true; } });
+assert(spacePrevented === false, 'handleAlphaOnlyKeyDown allows space');
+
+let backspacePrevented = false;
+handleAlphaOnlyKeyDown({ key: 'Backspace', ctrlKey: false, metaKey: false, altKey: false, preventDefault: () => { backspacePrevented = true; } });
+assert(backspacePrevented === false, 'handleAlphaOnlyKeyDown allows Backspace navigation key');
+
+assert(sanitizeAlphaName('Organic 123 Cow Ghee 45') === 'Organic  Cow Ghee ', 'sanitizeAlphaName strips numbers');
+assert(sanitizeAlphaName('Amul Dairy') === 'Amul Dairy', 'sanitizeAlphaName preserves alphabet and space');
 
 console.log('\n--- 2. Testing Filter Rules (Stock Level Removed) ---');
 

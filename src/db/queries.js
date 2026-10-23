@@ -144,15 +144,121 @@ export async function applySupplierMinimums(supplierId) {
 
 // ── Pending Manifests ───────────────────────────────────────────────────────
 export async function fetchPendingManifests(supplierId) {
+  if (supplierId) {
+    const rows = await runQuery(`
+      SELECT id, manifest_number as manifestNumber, supplier_id as supplierId,
+             expected_date as expectedDate, items_count as itemsCount,
+             total_units as totalUnits, carrier, status, created_at as createdAt
+      FROM pending_manifests
+      WHERE supplier_id = ?
+      ORDER BY created_at DESC;
+    `, [supplierId]);
+    return rows;
+  }
+  return fetchAllManifests();
+}
+
+export async function fetchAllManifests() {
   const rows = await runQuery(`
-    SELECT id, manifest_number as manifestNumber, supplier_id as supplierId,
-           expected_date as expectedDate, items_count as itemsCount,
-           total_units as totalUnits, carrier, status, created_at as createdAt
-    FROM pending_manifests
-    WHERE supplier_id = ?
-    ORDER BY created_at DESC;
-  `, [supplierId]);
-  return rows;
+    SELECT m.id, m.manifest_number as manifestNumber, m.supplier_id as supplierId,
+           m.expected_date as expectedDate, m.items_count as itemsCount,
+           m.total_units as totalUnits, m.carrier, m.status, m.created_at as createdAt,
+           m.po_id as poId,
+           s.name as supplierName, s.category as supplierCategory, s.color as supplierColor
+    FROM pending_manifests m
+    LEFT JOIN suppliers s ON s.id = m.supplier_id
+    ORDER BY CASE m.status WHEN 'in_transit' THEN 1 WHEN 'pending' THEN 2 WHEN 'customs' THEN 3 ELSE 4 END, m.created_at DESC;
+  `);
+
+  const enriched = [];
+  for (const row of rows) {
+    let products = await runQuery(`
+      SELECT product_id as id, sku, name, category, unit_cost as unitCost, quantity
+      FROM manifest_items
+      WHERE manifest_id = ?
+      ORDER BY id ASC;
+    `, [row.id]);
+
+    if (!products || products.length === 0) {
+      if (row.poId) {
+        products = await runQuery(`
+          SELECT product_id as id, sku, name, unit_price as unitCost, quantity
+          FROM purchase_order_items
+          WHERE po_id = ?
+          ORDER BY id ASC;
+        `, [row.poId]);
+      }
+    }
+
+    if (!products || products.length === 0) {
+      products = await runQuery(`
+        SELECT id, sku, name, category, unit_cost as unitCost, 1 as quantity
+        FROM inventory_items
+        WHERE supplier_id = ?
+        LIMIT ?;
+      `, [row.supplierId, Math.max(3, row.itemsCount)]);
+    }
+
+    enriched.push({
+      ...row,
+      products: products || [],
+    });
+  }
+  return enriched;
+}
+
+export async function updateManifestStatus(manifestId, newStatus) {
+  return runTransaction((db) => {
+    // 1. Update manifest status
+    db.exec({
+      sql: `UPDATE pending_manifests SET status = ? WHERE id = ?;`,
+      bind: [newStatus, manifestId],
+    });
+
+    // 2. Fetch line items for this manifest
+    let manifestItems = db.selectObjects(
+      `SELECT product_id, sku, quantity FROM manifest_items WHERE manifest_id = ?;`,
+      [manifestId]
+    );
+
+    if (manifestItems.length === 0) {
+      const mnf = db.selectObjects(`SELECT po_id FROM pending_manifests WHERE id = ?;`, [manifestId]);
+      if (mnf.length > 0 && mnf[0].po_id) {
+        manifestItems = db.selectObjects(
+          `SELECT product_id, sku, quantity FROM purchase_order_items WHERE po_id = ?;`,
+          [mnf[0].po_id]
+        );
+      }
+    }
+
+    if (newStatus === 'delivered') {
+      // Stock delivered to warehouse: increase stock and clear ordered status to none
+      for (const item of manifestItems) {
+        const qty = Number(item.quantity) || 0;
+        db.exec({
+          sql: `UPDATE inventory_items
+                SET current_stock = current_stock + ?,
+                    order_status = 'none'
+                WHERE id = ? OR sku = ?;`,
+          bind: [qty, item.product_id, item.sku],
+        });
+      }
+    } else if (newStatus === 'in_transit') {
+      // Revert delivered status: subtract stock and restore ordered status
+      for (const item of manifestItems) {
+        const qty = Number(item.quantity) || 0;
+        db.exec({
+          sql: `UPDATE inventory_items
+                SET current_stock = MAX(0, current_stock - ?),
+                    order_status = 'ordered'
+                WHERE id = ? OR sku = ?;`,
+          bind: [qty, item.product_id, item.sku],
+        });
+      }
+    }
+
+    return true;
+  });
 }
 
 // ── Purchase Orders & Line Items ───────────────────────────────────────────
@@ -326,7 +432,60 @@ export async function submitPurchaseOrder({
       updateInventory.finalize();
     }
 
-    return { id: poId, poNumber: generatedPoNum, status: 'submitted', timestamp: now };
+    // 5. Create Inbound Delivery Manifest for this dispatched PO
+    const manifestId = `mnf-${supplierId}-${Date.now()}`;
+    const manifestNum = `MNF-2026-${Math.floor(100 + Math.random() * 900)}`;
+    const totalUnits = items.reduce((sum, item) => sum + (Number(item.orderQty || item.quantity) || 0), 0);
+
+    const supInfo = db.selectObjects(`SELECT name, lead_time FROM suppliers WHERE id = ? LIMIT 1;`, [supplierId]);
+    const supName = supInfo.length > 0 ? supInfo[0].name : supplierId;
+    const supLead = supInfo.length > 0 ? supInfo[0].lead_time : '2-3 Days';
+
+    const carrierMap = {
+      hf: 'Heritage ColdChain Logistics',
+      bi: 'Britannia Roadlines',
+      nf: 'Nature\'s Express Logistics',
+    };
+    const carrier = carrierMap[supplierId] || `${supName} Logistics`;
+
+    let daysToAdd = 2;
+    if (supLead) {
+      const match = supLead.match(/(\d+)/g);
+      if (match && match.length > 0) {
+        daysToAdd = parseInt(match[match.length - 1], 10) || 2;
+        if (supLead.toLowerCase().includes('hr')) {
+          daysToAdd = Math.ceil(daysToAdd / 24);
+        }
+      }
+    }
+    const targetDate = new Date(Date.now() + Math.max(1, daysToAdd) * 24 * 60 * 60 * 1000);
+    const expectedDate = `${targetDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, 10:00 AM`;
+
+    db.exec({
+      sql: `INSERT INTO pending_manifests (id, manifest_number, supplier_id, po_id, expected_date, items_count, total_units, carrier, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'in_transit', ?);`,
+      bind: [manifestId, manifestNum, supplierId, poId, expectedDate, items.length, totalUnits, carrier, now],
+    });
+
+    const insertManifestItem = db.prepare(`
+      INSERT INTO manifest_items (id, manifest_id, product_id, sku, name, category, quantity, unit_cost)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+    `);
+    try {
+      items.forEach((it, idx) => {
+        const mItemId = `${manifestId}-item-${idx + 1}`;
+        const qty = Number(it.orderQty || it.quantity) || 0;
+        const cost = Number(it.unitCost || it.unitPrice) || 0;
+        insertManifestItem.bind([
+          mItemId, manifestId, it.id || it.productId || '',
+          it.sku || '', it.name || '', it.category || 'General', qty, cost
+        ]).stepReset();
+      });
+    } finally {
+      insertManifestItem.finalize();
+    }
+
+    return { id: poId, poNumber: generatedPoNum, manifestId, manifestNumber: manifestNum, status: 'submitted', timestamp: now };
   });
 }
 
@@ -352,6 +511,7 @@ export async function deletePurchaseOrder(poId) {
 export async function resetDatabaseToDefaults() {
   return runTransaction((db) => {
     db.exec(`
+      DELETE FROM manifest_items;
       DELETE FROM purchase_order_items;
       DELETE FROM purchase_orders;
       DELETE FROM pending_manifests;
@@ -392,22 +552,6 @@ export async function resetDatabaseToDefaults() {
       }
     } finally {
       insertProduct.finalize();
-    }
-
-    const insertManifest = db.prepare(`
-      INSERT INTO pending_manifests (
-        id, manifest_number, supplier_id, expected_date, items_count, total_units, carrier, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-    `);
-    try {
-      for (const m of SEED_MANIFESTS) {
-        insertManifest.bind([
-          m.id, m.manifest_number, m.supplier_id, m.expected_date,
-          m.items_count, m.total_units, m.carrier, m.status, m.created_at
-        ]).stepReset();
-      }
-    } finally {
-      insertManifest.finalize();
     }
 
     const insertPO = db.prepare(`
@@ -731,5 +875,79 @@ export async function bulkUpdateInventory(itemIds, updates) {
 
     return itemIds.length;
   });
+}
+
+// ── Batch Quantity Updates (Save All) ──────────────────────────────────────
+export async function batchUpdateOrderQuantities(edits) {
+  if (!edits || edits.length === 0) return 0;
+
+  // Pre-validate all edits before touching SQLite transaction
+  for (const edit of edits) {
+    const check = validateOrderQtyInput(edit.orderQty);
+    if (!check.isValid) {
+      throw new Error(`Validation failed for ${edit.sku}: ${check.error}`);
+    }
+  }
+
+  return runTransaction((db) => {
+    const updateStmt = db.prepare(`
+      UPDATE inventory_items
+      SET order_qty = ?,
+          selected = CASE WHEN ? > 0 THEN 1 ELSE selected END
+      WHERE sku = ?;
+    `);
+
+    try {
+      for (const edit of edits) {
+        const val = parseInt(edit.orderQty, 10);
+        updateStmt.bind([val, val, edit.sku]).stepReset();
+      }
+    } finally {
+      updateStmt.finalize();
+    }
+
+    return edits.length;
+  });
+}
+
+// ── Reorder Acknowledgements ───────────────────────────────────────────────
+export async function fetchReorderAcknowledgements() {
+  try {
+    const rows = await runQuery(`
+      SELECT product_id as productId FROM reorder_acknowledgements;
+    `);
+    return rows.map((r) => r.productId);
+  } catch (err) {
+    console.warn('Failed to fetch reorder acknowledgements:', err);
+    return [];
+  }
+}
+
+export async function saveReorderAcknowledgement(productId) {
+  if (!productId) return;
+  const now = new Date().toISOString();
+  await runExecute(`
+    INSERT OR REPLACE INTO reorder_acknowledgements (product_id, acknowledged_at)
+    VALUES (?, ?);
+  `, [productId, now]);
+}
+
+// ── App Settings (Theme, Preferences) ───────────────────────────────────────
+export async function fetchAppSetting(key, defaultValue = null) {
+  try {
+    const rows = await runQuery(`
+      SELECT value FROM app_settings WHERE key = ?;
+    `, [key]);
+    return rows.length > 0 ? rows[0].value : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+export async function saveAppSetting(key, value) {
+  await runExecute(`
+    INSERT OR REPLACE INTO app_settings (key, value)
+    VALUES (?, ?);
+  `, [key, String(value)]);
 }
 

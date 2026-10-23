@@ -122,23 +122,8 @@ function seedDatabase(db) {
       insertProduct.finalize();
     }
 
-    // 3. Pending Manifests
-    const insertManifest = db.prepare(`
-      INSERT OR IGNORE INTO pending_manifests (
-        id, manifest_number, supplier_id, expected_date, items_count, total_units, carrier, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    // 3. Pending Manifests (Generated dynamically on PO dispatch, no mock data)
 
-    try {
-      for (const m of SEED_MANIFESTS) {
-        insertManifest.bind([
-          m.id, m.manifest_number, m.supplier_id, m.expected_date,
-          m.items_count, m.total_units, m.carrier, m.status, m.created_at
-        ]).stepReset();
-      }
-    } finally {
-      insertManifest.finalize();
-    }
 
     // 4. Purchase Orders and Line Items
     const insertPO = db.prepare(`
@@ -218,14 +203,14 @@ export async function getDatabase() {
               savedBytes.byteLength,
               sqlite3.capi.SQLITE_DESERIALIZE_FREEONCLOSE | sqlite3.capi.SQLITE_DESERIALIZE_RESIZEABLE
             );
-            if (rc === 0) {
-              console.info('[SQLite] Successfully restored persistent database from IndexedDB.');
-            }
+            // if (rc === 0) {
+            //   console.info('[SQLite] Successfully restored persistent database from IndexedDB.');
+            // }
           } catch (err) {
             console.warn('[SQLite] Deserialization fallback error:', err);
           }
         }
-        console.info('[SQLite] Running browser-local SQLite with persistent storage.');
+        // console.info('[SQLite] Running browser-local SQLite with persistent storage.');
       }
 
       dbInstance = db;
@@ -251,6 +236,60 @@ export async function getDatabase() {
         }
       } catch (colErr) {
         console.warn('[SQLite] Column migration check error:', colErr);
+      }
+
+      // Safe migration check for pending_manifests check constraint to support delivered status
+      try {
+        const tableCheck = db.selectValue("SELECT sql FROM sqlite_master WHERE type='table' AND name='pending_manifests';");
+        if (tableCheck && !tableCheck.includes('delivered')) {
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS pending_manifests_v2 (
+              id TEXT PRIMARY KEY,
+              manifest_number TEXT UNIQUE NOT NULL,
+              supplier_id TEXT NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+              expected_date TEXT NOT NULL,
+              items_count INTEGER NOT NULL,
+              total_units INTEGER NOT NULL,
+              carrier TEXT NOT NULL,
+              status TEXT NOT NULL CHECK(status IN ('in_transit', 'pending', 'customs', 'delivered')),
+              created_at TEXT NOT NULL
+            );
+            INSERT OR IGNORE INTO pending_manifests_v2 SELECT * FROM pending_manifests;
+            DROP TABLE pending_manifests;
+            ALTER TABLE pending_manifests_v2 RENAME TO pending_manifests;
+          `);
+          console.info('[SQLite] Migrated pending_manifests table to support delivered status.');
+          schedulePersistence();
+        }
+
+        // Migration: create manifest_items table if missing and add po_id to pending_manifests
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS manifest_items (
+            id TEXT PRIMARY KEY,
+            manifest_id TEXT NOT NULL REFERENCES pending_manifests(id) ON DELETE CASCADE,
+            product_id TEXT NOT NULL,
+            sku TEXT NOT NULL,
+            name TEXT NOT NULL,
+            category TEXT,
+            quantity INTEGER NOT NULL,
+            unit_cost REAL NOT NULL
+          );
+        `);
+
+        try {
+          db.exec(`ALTER TABLE pending_manifests ADD COLUMN po_id TEXT;`);
+        } catch (_) {
+          // column already exists
+        }
+
+        // Clean up any initial mock seed manifests
+        db.exec(`
+          DELETE FROM pending_manifests
+          WHERE id IN ('mnf-hf-1', 'mnf-hf-2', 'mnf-bi-1', 'mnf-bi-2', 'mnf-nf-1', 'mnf-nf-2')
+             OR id LIKE 'seed-%';
+        `);
+      } catch (mErr) {
+        console.warn('[SQLite] Manifest migration check error:', mErr);
       }
 
       // Verify if seeded or if products need migration to 150 records

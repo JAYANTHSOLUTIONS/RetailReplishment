@@ -59,16 +59,33 @@ CREATE TABLE IF NOT EXISTS pending_manifests (
   id TEXT PRIMARY KEY,
   manifest_number TEXT UNIQUE NOT NULL,
   supplier_id TEXT NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+  po_id TEXT,
   expected_date TEXT NOT NULL,
   items_count INTEGER NOT NULL,
   total_units INTEGER NOT NULL,
   carrier TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('in_transit', 'pending', 'customs')),
+  status TEXT NOT NULL CHECK(status IN ('in_transit', 'pending', 'customs', 'delivered')),
   created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS manifest_items (
+  id TEXT PRIMARY KEY,
+  manifest_id TEXT NOT NULL REFERENCES pending_manifests(id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL,
+  sku TEXT NOT NULL,
+  name TEXT NOT NULL,
+  category TEXT,
+  quantity INTEGER NOT NULL,
+  unit_cost REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS app_settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS reorder_acknowledgements (
+  product_id TEXT PRIMARY KEY,
+  acknowledged_at TEXT NOT NULL
 );
 `;

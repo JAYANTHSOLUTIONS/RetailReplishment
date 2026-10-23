@@ -22,13 +22,13 @@
 export const FIELD_LIMITS = {
   PRODUCT: {
     NAME_MIN: 2,
-    NAME_MAX: 100,
+    NAME_MAX: 30,
     CATEGORY_MIN: 2,
     CATEGORY_MAX: 50,
     STOCK_MIN: 0,
-    STOCK_MAX: 999999,
+    STOCK_MAX: 9999,
     TARGET_MIN: 0,
-    TARGET_MAX: 999999,
+    TARGET_MAX: 9999,
     PRICE_MIN: 0,
     PRICE_MAX: 1000000,
     QTY_MIN: 0,
@@ -36,13 +36,13 @@ export const FIELD_LIMITS = {
   },
   SUPPLIER: {
     NAME_MIN: 2,
-    NAME_MAX: 80,
+    NAME_MAX: 30,
     CATEGORY_MIN: 2,
     CATEGORY_MAX: 50,
     MOQ_MIN: 0,
-    MOQ_MAX: 10000000,
+    MOQ_MAX: 9999,
     UNITS_MIN: 0,
-    UNITS_MAX: 100000,
+    UNITS_MAX: 9999,
     LEAD_TIME_MAX: 20,
   },
   BULK: {
@@ -55,8 +55,72 @@ export const FIELD_LIMITS = {
   },
 };
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_REGEX = /^[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]{6,15}$/;
+const EMAIL_REGEX = /^[a-zA-Z]{4,}[a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+const PHONE_REGEX = /^\+?[0-9]{7,15}$/;
+
+/**
+ * Sanitizes mobile number input: allows leading + and digits only, max 15 chars.
+ */
+export function sanitizeMobileInput(raw) {
+  if (!raw) return '';
+  const str = String(raw).trim();
+  const hasPlus = str.includes('+');
+  const digits = str.replace(/\D/g, '');
+  const result = hasPlus ? `+${digits}` : digits;
+  return result.slice(0, 15);
+}
+
+/**
+ * Sanitizes numeric price input: allows digits and at most 1 decimal point with up to 2 decimal places.
+ */
+export function sanitizePriceInput(raw) {
+  if (!raw) return '';
+  let str = String(raw).replace(/[^0-9.]/g, '');
+  const parts = str.split('.');
+  if (parts.length > 2) {
+    str = parts[0] + '.' + parts.slice(1).join('');
+  }
+  const cleanParts = str.split('.');
+  if (cleanParts[1] && cleanParts[1].length > 2) {
+    str = cleanParts[0] + '.' + cleanParts[1].slice(0, 2);
+  }
+  return str;
+}
+
+/**
+ * Sanitizes non-negative integer input: digits only, max length.
+ */
+export function sanitizeIntegerInput(raw, maxDigits = 6) {
+  if (!raw) return '';
+  return String(raw).replace(/\D/g, '').slice(0, maxDigits);
+}
+
+/**
+ * Blocks typing numbers and non-alphabetic characters into name fields.
+ */
+export function handleAlphaOnlyKeyDown(e) {
+  // Allow navigation, editing keys, and key combinations (Ctrl/Cmd+A, C, V, etc.)
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key.length > 1) return; // Backspace, Delete, Tab, Enter, Arrows, etc.
+
+  // Block numbers strictly
+  if (/[0-9]/.test(e.key)) {
+    e.preventDefault();
+    return;
+  }
+  // Allow only alphabets, spaces, and standard name characters (-, ', &, .)
+  if (!/^[a-zA-Z\s\-'.&]$/.test(e.key)) {
+    e.preventDefault();
+  }
+}
+
+/**
+ * Sanitizes name input: removes any numbers and non-alphabetic characters.
+ */
+export function sanitizeAlphaName(raw) {
+  if (!raw) return '';
+  return String(raw).replace(/[0-9]/g, '');
+}
 
 /**
  * Validates inline or single order quantity input.
@@ -101,7 +165,11 @@ export function validateProductForm(
   // Name
   const cleanName = String(name || '').trim();
   if (!cleanName) {
-    errors.name = 'Product name is required.';
+    errors.name = 'Please enter valid product name.';
+  } else if (/^\d/.test(cleanName)) {
+    errors.name = 'Please enter valid product name';
+  } else if (/\d/.test(cleanName)) {
+    errors.name = 'Please enter valid product name';
   } else if (cleanName.length < FIELD_LIMITS.PRODUCT.NAME_MIN) {
     errors.name = `Product name must be at least ${FIELD_LIMITS.PRODUCT.NAME_MIN} characters.`;
   } else if (cleanName.length > FIELD_LIMITS.PRODUCT.NAME_MAX) {
@@ -158,8 +226,8 @@ export function validateProductForm(
   const priceStr = String(unitCost ?? '').trim();
   if (priceStr === '') {
     errors.unitCost = 'Unit price is required.';
-  } else if (isNaN(Number(priceStr)) || Number(priceStr) < 0) {
-    errors.unitCost = 'Unit price must be a non-negative number.';
+  } else if (!/^\d+(\.\d{1,2})?$/.test(priceStr) || isNaN(Number(priceStr)) || Number(priceStr) < 0) {
+    errors.unitCost = 'Unit price must be a valid non-negative number with at most 2 decimal places.';
   } else {
     const priceNum = Number(priceStr);
     if (priceNum < FIELD_LIMITS.PRODUCT.PRICE_MIN || priceNum > FIELD_LIMITS.PRODUCT.PRICE_MAX) {
@@ -202,6 +270,10 @@ export function validateSupplierForm(
   const cleanName = String(name || '').trim();
   if (!cleanName) {
     errors.name = 'Supplier name is required.';
+  } else if (/^\d/.test(cleanName)) {
+    errors.name = 'Please enter valid name ';
+  } else if (/\d/.test(cleanName)) {
+    errors.name = 'Supplier name cannot contain numbers. Only letters, spaces, and punctuation are allowed.';
   } else if (cleanName.length < FIELD_LIMITS.SUPPLIER.NAME_MIN) {
     errors.name = `Supplier name must be at least ${FIELD_LIMITS.SUPPLIER.NAME_MIN} characters.`;
   } else if (cleanName.length > FIELD_LIMITS.SUPPLIER.NAME_MAX) {
@@ -254,22 +326,36 @@ export function validateSupplierForm(
     }
   }
 
-  // Contact Email (optional, validate format if supplied)
+  // Contact Email (optional, strict email validation: no leading numbers, minimum 4 alpha letters before numbers)
   const cleanEmail = String(contactEmail || '').trim();
-  if (cleanEmail && !EMAIL_REGEX.test(cleanEmail)) {
-    errors.contactEmail = 'Please enter a valid email address (e.g. orders@supplier.com).';
+  if (cleanEmail) {
+    if (/^\d/.test(cleanEmail)) {
+      errors.contactEmail = 'Please enter valid email';
+    } else if (!/^[a-zA-Z]{4,}/.test(cleanEmail)) {
+      errors.contactEmail = 'Email must start with at least 4 letters before any numbers or symbols (e.g. supp12@domain.com).';
+    } else if (!EMAIL_REGEX.test(cleanEmail)) {
+      errors.contactEmail = 'Please enter a valid email address (e.g. orders@supplier.com).';
+    }
   }
 
-  // Contact Rep (optional, length limit)
+  // Contact Rep (optional, strict name validation: no numbers, cannot start with a number)
   const cleanRep = String(contactRep || '').trim();
-  if (cleanRep && cleanRep.length > FIELD_LIMITS.SUPPLIER.NAME_MAX) {
-    errors.contactRep = `Representative name cannot exceed ${FIELD_LIMITS.SUPPLIER.NAME_MAX} characters.`;
+  if (cleanRep) {
+    if (/^\d/.test(cleanRep)) {
+      errors.contactRep = 'Please enter valid name';
+    } else if (/\d/.test(cleanRep)) {
+      errors.contactRep = 'Representative name cannot contain numbers. Only letters, spaces, and punctuation are allowed.';
+    } else if (cleanRep.length < 2) {
+      errors.contactRep = 'Representative name must be at least 2 characters.';
+    } else if (cleanRep.length > FIELD_LIMITS.SUPPLIER.NAME_MAX) {
+      errors.contactRep = `Representative name cannot exceed ${FIELD_LIMITS.SUPPLIER.NAME_MAX} characters.`;
+    }
   }
 
   // Contact Phone (optional, validate format if supplied)
   const cleanPhone = String(contactPhone || '').trim();
   if (cleanPhone && !PHONE_REGEX.test(cleanPhone)) {
-    errors.contactPhone = 'Please enter a valid phone number (7–15 digits, e.g. +91 98765 43210).';
+    errors.contactPhone = 'Please enter a valid mobile number';
   }
 
   // Lead Time (optional, length limit)
