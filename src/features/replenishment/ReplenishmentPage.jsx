@@ -29,7 +29,7 @@ import AddSupplierModal from './AddSupplierModal.jsx';
 import mainLogo from '../../assets/logos/main-logo.png';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
 import { validateOrderQtyInput, sanitizeIntegerInput } from '../../utils/validation.js';
-import { ThemeSwitcher, StatusBadge, KeyboardShortcutsModal } from '../../components/ui';
+import { ThemeSwitcher, StatusBadge, KeyboardShortcutsModal, Modal, Button } from '../../components/ui';
 
 // Helper currency formatter
 const formatCurrency = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
@@ -4163,192 +4163,146 @@ export default function ReplenishmentPage({
       )}
 
       {/* ─── Unified State-Changing Confirmation Modal (Cancel, Save, Submit, Delete) ─── */}
-      {confirmModalConfig && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-action-title" onClick={confirmModalConfig.onCancel}>
-          <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-md" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-content confirm-modal">
-              <div className="modal-header confirm-modal-header">
-                <span className="confirm-modal-icon">⚠️</span>
-                <h3 id="confirm-action-title" className="confirm-modal-title" style={{ margin: 0 }}>{confirmModalConfig.title}</h3>
-                <button className="modal-close-btn info-modal-close" onClick={confirmModalConfig.onCancel} aria-label="Close modal">✕</button>
-              </div>
-              <div className="modal-body confirm-modal-body">
-                <p style={{ margin: 0 }}>{confirmModalConfig.message}</p>
-              </div>
-              <div className="modal-footer confirm-modal-actions">
-                <button type="button" className="btn-cancel" onClick={confirmModalConfig.onCancel}>
-                  Keep Editing
-                </button>
-                <button type="button" className={confirmModalConfig.confirmClass || 'btn-primary-action'} onClick={confirmModalConfig.onConfirm}>
-                  {confirmModalConfig.confirmText}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={Boolean(confirmModalConfig)}
+        onClose={confirmModalConfig?.onCancel}
+        title={confirmModalConfig?.title || 'Confirmation'}
+        icon={<span style={{ fontSize: 18 }} aria-hidden="true">⚠️</span>}
+        size="md"
+        contentClassName="confirm-modal"
+        footer={
+          <>
+            <Button variant="secondary" onClick={confirmModalConfig?.onCancel}>
+              Keep Editing
+            </Button>
+            <Button
+              variant={confirmModalConfig?.confirmClass?.includes('danger') ? 'danger' : 'primary'}
+              onClick={confirmModalConfig?.onConfirm}
+            >
+              {confirmModalConfig?.confirmText}
+            </Button>
+          </>
+        }
+      >
+        <p style={{ margin: 0 }}>{confirmModalConfig?.message}</p>
+      </Modal>
 
       {/* ─── Unsaved Changes Confirmation Modal ──────────────────────────── */}
-      {showUnsavedModal && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="unsaved-modal-title" onClick={cancelDiscardUnsaved}>
-          <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-sm" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-content confirm-modal">
-              <div className="modal-header confirm-modal-header">
-                <span className="confirm-modal-icon">⚠️</span>
-                <h3 id="unsaved-modal-title" className="confirm-modal-title" style={{ margin: 0 }}>Discard Unsaved Changes?</h3>
-                <button className="modal-close-btn info-modal-close" onClick={cancelDiscardUnsaved} aria-label="Close modal">✕</button>
-              </div>
-              <div className="modal-body confirm-modal-body">
-                <p style={{ margin: 0 }}>
-                  You have modified the order quantity for SKU <strong>{editingSku}</strong>. If you proceed without saving, your modifications will be discarded.
-                </p>
-              </div>
-              <div className="modal-footer confirm-modal-actions">
-                <button type="button" className="btn-cancel" onClick={cancelDiscardUnsaved}>
-                  Keep Editing
-                </button>
-                <button type="button" className="btn-danger" onClick={confirmDiscardUnsaved}>
-                  Discard Changes
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={showUnsavedModal}
+        onClose={cancelDiscardUnsaved}
+        title="Discard Unsaved Changes?"
+        icon={<span style={{ fontSize: 18 }} aria-hidden="true">⚠️</span>}
+        size="sm"
+        contentClassName="confirm-modal"
+        footer={
+          <>
+            <Button variant="secondary" onClick={cancelDiscardUnsaved}>
+              Keep Editing
+            </Button>
+            <Button variant="danger" onClick={confirmDiscardUnsaved}>
+              Discard Changes
+            </Button>
+          </>
+        }
+      >
+        <p style={{ margin: 0 }}>
+          You have modified the order quantity for SKU <strong>{editingSku}</strong>. If you proceed without saving, your modifications will be discarded.
+        </p>
+      </Modal>
 
       {/* ─── Save All Pending Changes Confirmation Modal ─────────────────── */}
-      {saveAllModalOpen && (
-        <div
-          className="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="save-all-modal-title"
-          onClick={() => !isSavingAll && setSaveAllModalOpen(false)}
-        >
-          <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-md" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-content confirm-modal">
-              <div className="modal-header confirm-modal-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 18 }}>💾</span>
-                  <h3 id="save-all-modal-title" className="confirm-modal-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
-                    Confirm Save All Quantity Changes
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  className="modal-close-btn info-modal-close"
-                  onClick={() => !isSavingAll && setSaveAllModalOpen(false)}
-                  aria-label="Close modal"
-                  disabled={isSavingAll}
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="modal-body confirm-modal-body" style={{ padding: '16px 18px', maxHeight: '55vh', overflowY: 'auto' }}>
-                <p style={{ margin: '0 0 12px 0', fontSize: 13, color: 'var(--text)' }}>
-                  You are about to save changes for <strong>{Object.keys(pendingQtyEdits).length}</strong> product{Object.keys(pendingQtyEdits).length > 1 ? 's' : ''} to SQLite:
-                </p>
-                {saveAllError && (
-                  <div className="field-error" style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: 6, color: '#ef4444', fontSize: 12, marginBottom: 12 }}>
-                    {saveAllError}
-                  </div>
-                )}
-                <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
-                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--surface2)', color: 'var(--text2)', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
-                        <th style={{ padding: '6px 10px' }}>SKU</th>
-                        <th style={{ padding: '6px 10px' }}>Product</th>
-                        <th style={{ padding: '6px 10px', textAlign: 'right' }}>Current</th>
-                        <th style={{ padding: '6px 10px', textAlign: 'right' }}>New Qty</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(pendingQtyEdits).map(([sku, newQty]) => {
-                        const p = products.find((prod) => prod.sku === sku);
-                        return (
-                          <tr key={sku} style={{ borderBottom: '1px solid var(--border-light)' }}>
-                            <td style={{ padding: '6px 10px', fontWeight: 600 }}>{sku}</td>
-                            <td style={{ padding: '6px 10px', color: 'var(--text2)' }}>{p?.name || 'Item'}</td>
-                            <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text3)' }}>{p?.orderQty ?? 0}</td>
-                            <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--brand)' }}>{newQty}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div className="modal-footer confirm-modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 18px', borderTop: '1px solid var(--border)' }}>
-                <button
-                  type="button"
-                  className="btn-cancel"
-                  onClick={() => setSaveAllModalOpen(false)}
-                  disabled={isSavingAll}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary-action"
-                  onClick={handleConfirmSaveAll}
-                  disabled={isSavingAll}
-                >
-                  {isSavingAll ? 'Saving to Database...' : `Confirm & Save (${Object.keys(pendingQtyEdits).length})`}
-                </button>
-              </div>
-            </div>
+      <Modal
+        isOpen={saveAllModalOpen}
+        onClose={() => !isSavingAll && setSaveAllModalOpen(false)}
+        title="Confirm Save All Quantity Changes"
+        icon={<span style={{ fontSize: 18 }} aria-hidden="true">💾</span>}
+        size="md"
+        contentClassName="confirm-modal"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setSaveAllModalOpen(false)}
+              disabled={isSavingAll}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleConfirmSaveAll}
+              disabled={isSavingAll}
+            >
+              {isSavingAll ? 'Saving to Database...' : `Confirm & Save (${Object.keys(pendingQtyEdits).length})`}
+            </Button>
+          </>
+        }
+      >
+        <p style={{ margin: '0 0 12px 0', fontSize: 13, color: 'var(--text)' }}>
+          You are about to save changes for <strong>{Object.keys(pendingQtyEdits).length}</strong> product{Object.keys(pendingQtyEdits).length > 1 ? 's' : ''} to SQLite:
+        </p>
+        {saveAllError && (
+          <div className="field-error" style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: 6, color: '#ef4444', fontSize: 12, marginBottom: 12 }}>
+            {saveAllError}
           </div>
+        )}
+        <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+          <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'var(--surface2)', color: 'var(--text2)', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
+                <th style={{ padding: '6px 10px' }}>SKU</th>
+                <th style={{ padding: '6px 10px' }}>Product</th>
+                <th style={{ padding: '6px 10px', textAlign: 'right' }}>Current</th>
+                <th style={{ padding: '6px 10px', textAlign: 'right' }}>New Qty</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(pendingQtyEdits).map(([sku, newQty]) => {
+                const p = products.find((prod) => prod.sku === sku);
+                return (
+                  <tr key={sku} style={{ borderBottom: '1px solid var(--border-light)' }}>
+                    <td style={{ padding: '6px 10px', fontWeight: 600 }}>{sku}</td>
+                    <td style={{ padding: '6px 10px', color: 'var(--text2)' }}>{p?.name || 'Item'}</td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text3)' }}>{p?.orderQty ?? 0}</td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--brand)' }}>{newQty}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      )}
+      </Modal>
 
       {/* ─── Reorder Warning Confirmation Modal ──────────────────────────── */}
-      {reorderConfirmProd && (
-        <div
-          className="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="reorder-confirm-title"
-          onClick={handleCancelReorder}
-        >
-          <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-md" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-content confirm-modal">
-              <div className="modal-header confirm-modal-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 18 }}>🔄</span>
-                  <h3 id="reorder-confirm-title" className="confirm-modal-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
-                    Reorder Previously Dispatched Product?
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  className="modal-close-btn info-modal-close"
-                  onClick={handleCancelReorder}
-                  aria-label="Close modal"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="modal-body confirm-modal-body" style={{ padding: '16px 18px' }}>
-                <p style={{ margin: '0 0 10px 0', fontSize: 13, color: 'var(--text)' }}>
-                  <strong>{reorderConfirmProd.name}</strong> (SKU: <code>{reorderConfirmProd.sku}</code>) has already been ordered and dispatched.
-                </p>
-                <p style={{ margin: 0, fontSize: 12, color: 'var(--text2)', lineHeight: 1.5 }}>
-                  Would you like to select this product again for a new replenishment order? Your acknowledgement will be remembered in SQLite so you won't be prompted again for this product.
-                </p>
-              </div>
-              <div className="modal-footer confirm-modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 18px', borderTop: '1px solid var(--border)' }}>
-                <button type="button" className="btn-cancel" onClick={handleCancelReorder}>
-                  Cancel (Leave Unselected)
-                </button>
-                <button type="button" className="btn-primary-action" onClick={handleConfirmReorder}>
-                  Confirm Reorder
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={Boolean(reorderConfirmProd)}
+        onClose={handleCancelReorder}
+        title="Reorder Previously Dispatched Product?"
+        icon={<span style={{ fontSize: 18 }} aria-hidden="true">🔄</span>}
+        size="md"
+        contentClassName="confirm-modal"
+        footer={
+          <>
+            <Button variant="secondary" onClick={handleCancelReorder}>
+              Cancel (Leave Unselected)
+            </Button>
+            <Button variant="primary" onClick={handleConfirmReorder}>
+              Confirm Reorder
+            </Button>
+          </>
+        }
+      >
+        {reorderConfirmProd && (
+          <>
+            <p style={{ margin: '0 0 10px 0', fontSize: 13, color: 'var(--text)' }}>
+              <strong>{reorderConfirmProd.name}</strong> (SKU: <code>{reorderConfirmProd.sku}</code>) has already been ordered and dispatched.
+            </p>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--text2)', lineHeight: 1.5 }}>
+              Would you like to select this product again for a new replenishment order? Your acknowledgement will be remembered in SQLite so you won't be prompted again for this product.
+            </p>
+          </>
+        )}
+      </Modal>
 
       {/* ─── Keyboard Shortcuts Reference Modal ───────────────────────────────── */}
       <KeyboardShortcutsModal

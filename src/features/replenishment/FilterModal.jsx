@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { matchesFilters } from '../../utils';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
+import { Modal, Button } from '../../components/ui';
 
 export default function FilterModal({
   isOpen,
@@ -80,34 +81,37 @@ export default function FilterModal({
   };
 
   return (
-    <div
-      ref={modalRef}
-      className={`modal-overlay fade-toggle ${isOpen ? 'open' : ''}`}
-      role="dialog"
-      aria-modal="true"
-      inert={!isOpen ? true : undefined}
-      aria-labelledby="filter-modal-title"
-      onClick={handleClose}
-    >
-      <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-content filter-modal-card">
-          {/* Header */}
-          <div className="modal-header info-modal-header">
-            <div className="modal-title filter-modal-title-wrap">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-              </svg>
-              <h2 id="filter-modal-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
-                Filter Replenishment Inventory
-              </h2>
-            </div>
-            {/* <button className="modal-close-btn info-modal-close" onClick={onClose} aria-label="Close modal">
-              ✕
-            </button> */}
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Filter Replenishment Inventory"
+      icon={
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+        </svg>
+      }
+      size="lg"
+      contentClassName="filter-modal-card"
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+          <Button variant="ghost" onClick={handleClearAll}>
+            Clear all
+          </Button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Button variant="secondary" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleApply}
+              disabled={matchingCount === 0}
+            >
+              Show results ({matchingCount})
+            </Button>
           </div>
-
-          {/* Modal Body */}
-          <div className="modal-body filter-modal-body">
+        </div>
+      }
+    >
           {/* Search Input */}
           <div className="filter-search-row">
             <label htmlFor="filter-modal-search" className="filter-section-title">
@@ -208,29 +212,6 @@ export default function FilterModal({
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Footer Actions */}
-        <div className="modal-footer filter-modal-footer">
-          <button type="button" className="btn-cancel" onClick={handleClearAll}>
-            Clear all
-          </button>
-          <div className="filter-modal-footer-right">
-            <button type="button" className="btn-cancel" onClick={handleClose}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn-primary-action"
-              onClick={handleApply}
-              disabled={matchingCount === 0}
-            >
-              Show results ({matchingCount})
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+    </Modal>
   );
 }

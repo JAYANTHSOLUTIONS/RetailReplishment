@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import Button from './Button.jsx';
 
 /**
  * Accessible Keyboard Shortcuts Modal (WCAG 2.2 AA compliant)
@@ -176,14 +177,13 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }) {
           </div>
 
           <div className="modal-footer info-modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 20px', borderTop: '1px solid var(--border-light)' }}>
-            <button
-              type="button"
-              className="btn-primary"
+            <Button
+              variant="primary"
               onClick={onClose}
               style={{ minWidth: 90 }}
             >
               Done
-            </button>
+            </Button>
           </div>
         </div>
       </div>

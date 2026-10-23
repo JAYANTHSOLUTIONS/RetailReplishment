@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createSupplier } from '../../db/queries.js';
+import { Modal, Button } from '../../components/ui';
 import {
   validateSupplierForm,
   FIELD_LIMITS,
@@ -94,40 +95,40 @@ export default function AddSupplierModal({
   };
 
   return (
-    <div
-      className={`modal-overlay fade-toggle ${isOpen ? 'open' : ''}`}
-      role="dialog"
-      aria-modal="true"
-      inert={!isOpen ? true : undefined}
-      aria-labelledby="add-supplier-modal-title"
-      onClick={onClose}
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Add New Supplier Vendor"
+      icon={
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      }
+      size="lg"
+      contentClassName="add-supplier-card"
+      formProps={{
+        onSubmit: handleSubmit,
+        noValidate: true,
+      }}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button variant="primary" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Saving to SQLite...' : 'Save Supplier'}
+          </Button>
+        </>
+      }
     >
-      <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-content add-supplier-card">
-          <div className="modal-header info-modal-header">
-            <div className="modal-title info-modal-title">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-              <h2 id="add-supplier-modal-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
-                Add New Supplier Vendor
-              </h2>
-            </div>
-            {/* <button className="modal-close-btn info-modal-close" onClick={onClose} aria-label="Close modal">
-              ✕
-            </button> */}
-          </div>
-
-          <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div className="modal-body filter-modal-body modal-form-body">
-              {errors.form && (
-                <div className="form-error-banner" role="alert">
-                  {errors.form}
-                </div>
-              )}
+      {errors.form && (
+        <div className="form-error-banner" role="alert">
+          {errors.form}
+        </div>
+      )}
 
               <div className="form-grid-2">
                 <div className="form-group">
@@ -307,19 +308,7 @@ export default function AddSupplierModal({
               />
               {errors.leadTime && <span id="sup-lead-err" className="field-error">{errors.leadTime}</span>}
             </div>
-          </div>
 
-          <div className="modal-footer filter-modal-footer">
-            <button type="button" className="btn-cancel" onClick={onClose} disabled={isSubmitting}>
-              Cancel
-            </button>
-            <button type="submit" className="btn-primary-action" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving to SQLite...' : 'Save Supplier'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
+    </Modal>
   );
 }

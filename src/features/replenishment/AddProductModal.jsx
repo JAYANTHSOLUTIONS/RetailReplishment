@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createProduct, getNextProductIdentifiers } from '../../db/queries.js';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
+import { Modal, Button } from '../../components/ui';
 import {
   validateProductForm,
   FIELD_LIMITS,
@@ -116,38 +117,32 @@ export default function AddProductModal({
   };
 
   return (
-    <div
-      className={`modal-overlay fade-toggle ${isOpen ? 'open' : ''}`}
-      role="dialog"
-      aria-modal="true"
-      inert={!isOpen ? true : undefined}
-      aria-labelledby="add-product-modal-title"
-      onClick={onClose}
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Add New Inventory Product"
+      size="lg"
+      contentClassName="add-product-card"
+      formProps={{
+        onSubmit: handleSubmit,
+        noValidate: true,
+      }}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button variant="primary" type="submit" disabled={isSubmitting || loadingId}>
+            {isSubmitting ? 'Saving to SQLite...' : 'Save Product'}
+          </Button>
+        </>
+      }
     >
-      <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-content add-product-card">
-          <div className="modal-header info-modal-header">
-            <div className="modal-title info-modal-title">
-              {/* <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-              </svg> */}
-              <h2 id="add-product-modal-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
-                Add New Inventory Product
-              </h2>
-            </div>
-            {/* <button className="modal-close-btn info-modal-close" onClick={onClose} aria-label="Close modal">
-              ✕
-            </button> */}
-          </div>
-
-          <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div className="modal-body filter-modal-body modal-form-body">
-              {errors.form && (
-                <div className="form-error-banner" role="alert">
-                  {errors.form}
-                </div>
-              )}
+      {errors.form && (
+        <div className="form-error-banner" role="alert">
+          {errors.form}
+        </div>
+      )}
 
             {/* Auto ID Notice */}
             {/* <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
@@ -331,19 +326,7 @@ export default function AddProductModal({
                 {errors.orderQty && <span className="field-error">{errors.orderQty}</span>}
               </div>
             </div>
-          </div>
 
-          <div className="modal-footer filter-modal-footer">
-            <button type="button" className="btn-cancel" onClick={onClose} disabled={isSubmitting}>
-              Cancel
-            </button>
-            <button type="submit" className="btn-primary-action" disabled={isSubmitting || loadingId}>
-              {isSubmitting ? 'Saving to SQLite...' : 'Save Product'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
+    </Modal>
   );
 }

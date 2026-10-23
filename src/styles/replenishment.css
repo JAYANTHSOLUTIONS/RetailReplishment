@@ -2440,49 +2440,106 @@ body {
   justify-content: flex-end;
   gap: 10px;
 }
-.btn-cancel {
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
+/* ─── Unified UI Button System (.ui-btn) ─────────────────────────────────── */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: inherit;
   font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.btn-cancel:hover {
-  background: var(--border-light);
-  border-color: var(--border);
-}
-.btn-danger {
-  padding: 8px 16px;
+  line-height: 1.4;
   border-radius: 6px;
-  border: none;
-  background: #dc2626;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  user-select: none;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
 }
-.btn-danger:hover {
-  background: #b91c1c;
+
+.ui-btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
+
+.ui-btn:disabled,
+.ui-btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.ui-btn:focus-visible {
+  outline: 2px solid var(--brand, #2563eb);
+  outline-offset: 2px;
+}
+
+/* Button Sizes */
+.ui-btn--sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.ui-btn--md {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+.ui-btn--lg {
+  padding: 10px 20px;
+  font-size: 14px;
+}
+
+/* Button Variants & Standardized Hover */
+.ui-btn--primary,
 .btn-primary-action {
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: none;
   background: #2563eb;
   color: #ffffff;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
+  border: 1px solid #2563eb;
 }
-.btn-primary-action:hover {
+.ui-btn--primary:hover:not(:disabled),
+.btn-primary-action:hover:not(:disabled) {
   background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.25);
 }
+
+.ui-btn--secondary,
+.btn-cancel {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.ui-btn--secondary:hover:not(:disabled),
+.btn-cancel:hover:not(:disabled) {
+  background: var(--border-light);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.ui-btn--danger,
+.btn-danger {
+  background: #dc2626;
+  color: #ffffff;
+  border: 1px solid #dc2626;
+}
+.ui-btn--danger:hover:not(:disabled),
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.25);
+}
+
+.ui-btn--ghost {
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid transparent;
+}
+.ui-btn--ghost:hover:not(:disabled) {
+  background: var(--border-light);
+  color: var(--text);
+}
+
 
 @keyframes modalFadeIn {
   from { opacity: 0; }
