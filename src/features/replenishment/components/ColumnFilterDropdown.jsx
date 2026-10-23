@@ -10,6 +10,7 @@ export default function ColumnFilterDropdown({
     { key: 'asc', label: 'Sort A to Z' },
     { key: 'desc', label: 'Sort Z to A' },
   ],
+  align = 'left',
   onApply,
   onClear,
 }) {
@@ -17,8 +18,11 @@ export default function ColumnFilterDropdown({
   const [draftSelected, setDraftSelected] = useState(selectedValues);
   const [draftSort, setDraftSort] = useState(currentSort);
   const [searchValue, setSearchValue] = useState('');
+  const [isOverflowRight, setIsOverflowRight] = useState(false);
   const popoverRef = useRef(null);
   const buttonRef = useRef(null);
+
+  const effectiveAlign = align === 'right' || isOverflowRight ? 'right' : 'left';
 
   const handleToggleOpen = (e) => {
     e.stopPropagation();
@@ -26,9 +30,20 @@ export default function ColumnFilterDropdown({
       setDraftSelected(selectedValues);
       setDraftSort(currentSort);
       setSearchValue('');
+      setIsOverflowRight(false);
     }
     setIsOpen((prev) => !prev);
   };
+
+  // Adjust alignment if popover would overflow right edge of viewport
+  useEffect(() => {
+    if (isOpen && popoverRef.current) {
+      const rect = popoverRef.current.getBoundingClientRect();
+      if (rect.right > (window.innerWidth - 16)) {
+        setIsOverflowRight(true);
+      }
+    }
+  }, [isOpen]);
 
   // Click outside listener
   useEffect(() => {
@@ -82,6 +97,19 @@ export default function ColumnFilterDropdown({
     }
   };
 
+  const handleSortItemClick = (sortKey) => {
+    const nextSort = draftSort === sortKey ? null : sortKey;
+    setDraftSort(nextSort);
+    // In sort-only menus (e.g. Subtotal, Product Name), immediately apply and close (spreadsheet style)
+    if (options.length === 0) {
+      onApply({
+        selectedValues: draftSelected,
+        sort: nextSort,
+      });
+      setIsOpen(false);
+    }
+  };
+
   const handleApplyClick = () => {
     onApply({
       selectedValues: draftSelected,
@@ -119,9 +147,16 @@ export default function ColumnFilterDropdown({
       {isOpen && (
         <div
           ref={popoverRef}
-          className="col-filter-popover"
+          className={`col-filter-popover ${effectiveAlign === 'right' ? 'align-right' : ''}`}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Header for sort-only column menus (Google Sheets style) */}
+          {options.length === 0 && (
+            <div className="col-filter-menu-header">
+              <span>{title} Menu</span>
+            </div>
+          )}
+
           {/* 1. Sort Section */}
           {sortOptions.length > 0 && (
             <div className="col-filter-sort-section">
@@ -130,7 +165,7 @@ export default function ColumnFilterDropdown({
                   key={so.key}
                   type="button"
                   className={`col-filter-sort-item ${draftSort === so.key ? 'active' : ''}`}
-                  onClick={() => setDraftSort((prev) => (prev === so.key ? null : so.key))}
+                  onClick={() => handleSortItemClick(so.key)}
                 >
                   <span className="col-filter-sort-radio">
                     {draftSort === so.key ? '●' : '○'}
@@ -206,23 +241,25 @@ export default function ColumnFilterDropdown({
             </div>
           )}
 
-          {/* 3. Action buttons (Cancel / OK) */}
-          <div className="col-filter-footer">
-            <button
-              type="button"
-              className="col-filter-btn-cancel"
-              onClick={handleCancelClick}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="col-filter-btn-ok"
-              onClick={handleApplyClick}
-            >
-              OK
-            </button>
-          </div>
+          {/* 3. Action buttons (Cancel / OK) - only needed when filter options exist */}
+          {options.length > 0 && (
+            <div className="col-filter-footer">
+              <button
+                type="button"
+                className="col-filter-btn-cancel"
+                onClick={handleCancelClick}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="col-filter-btn-ok"
+                onClick={handleApplyClick}
+              >
+                OK
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -246,6 +283,7 @@ ColumnFilterDropdown.propTypes = {
       label: PropTypes.string.isRequired,
     })
   ),
+  align: PropTypes.oneOf(['left', 'right']),
   onApply: PropTypes.func.isRequired,
   onClear: PropTypes.func,
 };

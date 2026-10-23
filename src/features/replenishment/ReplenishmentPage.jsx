@@ -2094,6 +2094,7 @@ export default function ReplenishmentPage({
                           <ColumnFilterDropdown
                             title="Subtotal"
                             options={[]}
+                            align="right"
                             currentSort={colFilters.subtotalSort}
                             sortOptions={[
                               { key: 'high', label: 'Sort High → Low' },

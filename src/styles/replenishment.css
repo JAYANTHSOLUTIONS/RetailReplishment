@@ -7102,10 +7102,27 @@ button, input, select, textarea, .btn-replenish, .btn-delivered-action {
   font-family: inherit;
   user-select: none;
 }
+.col-filter-popover.align-right,
+.col-sub .col-filter-popover,
+.col-prc .col-filter-popover {
+  left: auto !important;
+  right: 0 !important;
+}
 [data-theme="dark"] .col-filter-popover {
   background: #1e2228;
   border-color: #3b434e;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+.col-filter-menu-header {
+  padding: 2px 10px 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text3);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
 }
 
 .col-filter-sort-section {

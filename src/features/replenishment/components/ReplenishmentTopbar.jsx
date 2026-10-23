@@ -3,24 +3,26 @@ import PropTypes from 'prop-types';
 import { ThemeSwitcher } from '../../../components/ui';
 
 export default function ReplenishmentTopbar({
-  searchTerm,
-  setSearchTerm,
-  searchInputRef,
-  windowWidth,
-  mobileSidebarOpen,
-  setMobileSidebarOpen,
-  setShortcutsModalOpen,
-  setAddProductModalOpen,
-  setAddSupplierModalOpen,
-  themePreference,
-  handleSelectTheme,
-  mainLogo,
-  onNavigateToManifests,
-  onNavigateToSuppliers,
+  searchTerm = '',
+  setSearchTerm = () => {},
+  searchInputRef = null,
+  windowWidth = typeof window !== 'undefined' ? window.innerWidth : 1200,
+  mobileSidebarOpen = false,
+  setMobileSidebarOpen = () => {},
+  setShortcutsModalOpen = () => {},
+  setAddProductModalOpen = () => {},
+  setAddSupplierModalOpen = () => {},
+  themePreference = 'system',
+  handleSelectTheme = () => {},
+  mainLogo = null,
+  onNavigateToManifests = () => {},
+  onNavigateToSuppliers = () => {},
+  onNavigateToReplenishment = () => {},
+  activePage = 'replenishment',
   suppliers = [],
-  activeQueueSupplierId,
-  setActiveQueueSupplierId,
-  handleSelectQueueSupplier,
+  activeQueueSupplierId = null,
+  setActiveQueueSupplierId = () => {},
+  handleSelectQueueSupplier = () => {},
   supplierLogos = {},
 }) {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -117,7 +119,16 @@ export default function ReplenishmentTopbar({
                   </svg>
                 </button>
               )}
-              <span className="brand-name">StockDesk</span>
+              <span
+                className="brand-name"
+                onClick={() => {
+                  if (onNavigateToReplenishment) onNavigateToReplenishment();
+                }}
+                style={{ cursor: onNavigateToReplenishment ? 'pointer' : 'default' }}
+                title={onNavigateToReplenishment ? 'Go to Replenishment Desk' : undefined}
+              >
+                StockDesk
+              </span>
             </div>
 
             {/* Desktop Global Search Bar (>= 992px) */}
@@ -338,16 +349,23 @@ export default function ReplenishmentTopbar({
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
                 <span>Inventory</span>
               </button>
-              <button type="button" className="mobile-sidebar-nav-item active" onClick={() => setMobileSidebarOpen(false)}>
+              <button
+                type="button"
+                className={`mobile-sidebar-nav-item ${activePage === 'replenishment' ? 'active' : ''}`}
+                onClick={() => {
+                  setMobileSidebarOpen(false);
+                  if (onNavigateToReplenishment) onNavigateToReplenishment();
+                }}
+              >
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                 <span>Replenishment Desk</span>
               </button>
               <button
                 type="button"
-                className="mobile-sidebar-nav-item"
+                className={`mobile-sidebar-nav-item ${activePage === 'manifests' ? 'active' : ''}`}
                 onClick={() => {
                   setMobileSidebarOpen(false);
-                  onNavigateToManifests();
+                  if (onNavigateToManifests) onNavigateToManifests();
                 }}
               >
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
@@ -355,7 +373,7 @@ export default function ReplenishmentTopbar({
               </button>
               <button
                 type="button"
-                className="mobile-sidebar-nav-item"
+                className={`mobile-sidebar-nav-item ${activePage === 'suppliers' ? 'active' : ''}`}
                 onClick={() => {
                   setMobileSidebarOpen(false);
                   if (onNavigateToSuppliers) onNavigateToSuppliers();
@@ -416,23 +434,25 @@ export default function ReplenishmentTopbar({
 }
 
 ReplenishmentTopbar.propTypes = {
-  searchTerm: PropTypes.string.isRequired,
-  setSearchTerm: PropTypes.func.isRequired,
+  searchTerm: PropTypes.string,
+  setSearchTerm: PropTypes.func,
   searchInputRef: PropTypes.object,
-  windowWidth: PropTypes.number.isRequired,
-  mobileSidebarOpen: PropTypes.bool.isRequired,
-  setMobileSidebarOpen: PropTypes.func.isRequired,
-  setShortcutsModalOpen: PropTypes.func.isRequired,
-  setAddProductModalOpen: PropTypes.func.isRequired,
-  setAddSupplierModalOpen: PropTypes.func.isRequired,
-  themePreference: PropTypes.string.isRequired,
-  handleSelectTheme: PropTypes.func.isRequired,
+  windowWidth: PropTypes.number,
+  mobileSidebarOpen: PropTypes.bool,
+  setMobileSidebarOpen: PropTypes.func,
+  setShortcutsModalOpen: PropTypes.func,
+  setAddProductModalOpen: PropTypes.func,
+  setAddSupplierModalOpen: PropTypes.func,
+  themePreference: PropTypes.string,
+  handleSelectTheme: PropTypes.func,
   mainLogo: PropTypes.string,
-  onNavigateToManifests: PropTypes.func.isRequired,
+  onNavigateToManifests: PropTypes.func,
   onNavigateToSuppliers: PropTypes.func,
-  suppliers: PropTypes.array.isRequired,
+  onNavigateToReplenishment: PropTypes.func,
+  activePage: PropTypes.string,
+  suppliers: PropTypes.array,
   activeQueueSupplierId: PropTypes.string,
-  setActiveQueueSupplierId: PropTypes.func.isRequired,
-  handleSelectQueueSupplier: PropTypes.func.isRequired,
+  setActiveQueueSupplierId: PropTypes.func,
+  handleSelectQueueSupplier: PropTypes.func,
   supplierLogos: PropTypes.object,
 };

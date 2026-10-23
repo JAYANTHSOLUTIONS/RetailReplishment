@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useDeferredValue, Fragment } from 'react';
 import '../../styles/replenishment.css';
 import { fetchAllManifests, updateManifestStatus } from '../../db/queries.js';
-import ThemeSwitcher from '../../components/ui/ThemeSwitcher.jsx';
+import ReplenishmentTopbar from '../replenishment/components/ReplenishmentTopbar.jsx';
 import KeyboardShortcutsModal from '../../components/ui/KeyboardShortcutsModal.jsx';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
 
@@ -20,6 +20,7 @@ export default function ManifestsPage({
   const [expandedManifestId, setExpandedManifestId] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
   const searchInputRef = useRef(null);
@@ -192,121 +193,25 @@ export default function ManifestsPage({
 
   return (
     <div className="redesign-page-shell">
-      {/* ─── Topbar Matching Main Replenishment Desk ───────────────────────── */}
-      <header className="topbar" role="banner">
-        <div className="topbar-brand">
-          <span className="brand-name" style={{ fontWeight: 800, fontSize: 18, letterSpacing: '-0.02em', color: 'var(--text)' }}>
-            StockDesk
-          </span>
-        </div>
-
-        {/* Global Catalog Search Box with Ctrl+K shortcut badge */}
-        <div className="topbar-search" style={{ flex: '1 1 320px', maxWidth: 440, marginLeft: 20 }}>
-          <div className="search-box" style={{ position: 'relative', width: '100%' }}>
-            <span className="search-icon" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
-            </span>
-            <input
-              ref={searchInputRef}
-              type="text"
-              className="search-inp"
-              placeholder="Search SKU, item name, supplier..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              aria-label="Search SKU, item name, supplier"
-              style={{
-                width: '100%',
-                height: 36,
-                padding: '0 64px 0 32px',
-                borderRadius: 6,
-                border: '1px solid var(--border)',
-                background: 'var(--bg)',
-                color: 'var(--text)',
-                fontSize: 13,
-                outline: 'none',
-              }}
-            />
-            <span
-              className="search-badge"
-              style={{
-                position: 'absolute',
-                right: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                fontSize: 10,
-                color: 'var(--text3)',
-                border: '1px solid var(--border)',
-                padding: '2px 5px',
-                borderRadius: 4,
-                background: 'var(--surface)',
-                fontWeight: 600,
-                pointerEvents: 'none',
-              }}
-            >
-              Ctrl+K
-            </span>
-          </div>
-        </div>
-
-        {/* Right Action Icons: Help, Theme Switcher, Profile */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            type="button"
-            className="icon-nav-btn"
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              border: '1px solid var(--border)',
-              background: 'var(--surface)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: 'var(--text2)',
-              fontSize: 13,
-              fontWeight: 700,
-            }}
-            onClick={() => setShortcutsModalOpen(true)}
-            aria-label="View keyboard shortcuts"
-            title="Keyboard Shortcuts (?)"
-          >
-            ?
-          </button>
-
-          <ThemeSwitcher
-            value={effectiveTheme}
-            onChange={handleSelectTheme}
-            className="topbar-theme-switcher"
-          />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-light)' }}>
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                background: '#2563eb',
-                color: '#fff',
-                fontWeight: 700,
-                fontSize: 11,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              SM
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>Store Manager</span>
-              <span style={{ fontSize: 10, color: 'var(--text3)' }}>Riverside Mart</span>
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* ─── Topbar Using Unified Replenishment Desk Topbar Component ────────── */}
+      <ReplenishmentTopbar
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        searchInputRef={searchInputRef}
+        windowWidth={windowWidth}
+        mobileSidebarOpen={mobileSidebarOpen}
+        setMobileSidebarOpen={setMobileSidebarOpen}
+        setShortcutsModalOpen={setShortcutsModalOpen}
+        themePreference={effectiveTheme}
+        handleSelectTheme={handleSelectTheme}
+        onNavigateToReplenishment={onNavigateBack}
+        onNavigateToManifests={() => {}}
+        onNavigateToSuppliers={() => {
+          if (onNavigateTo) onNavigateTo('suppliers');
+        }}
+        activePage="manifests"
+        suppliers={[]}
+      />
 
       {/* ─── Body: Left Icon Rail + Main Content ────────────────────────────── */}
       <div className="redesign-page-body">
