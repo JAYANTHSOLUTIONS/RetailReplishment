@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useDeferredValue, useCallback, memo } from 'react';
 import '../../styles/replenishment.css';
 import {
   fetchSuppliers,
@@ -279,6 +279,177 @@ const INITIAL_PRODUCTS = [
 // Helper currency formatter
 const formatCurrency = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
 
+// ── Memoized Table Row Component (React.memo - Group B Production Standard) ──
+const MemoizedProductRow = memo(function ProductRow({
+  prod,
+  pageIdx,
+  isRowFocused,
+  isOrdered,
+  hasPendingEdit,
+  pendingVal,
+  displayQty,
+  numericQty,
+  lineSubtotal,
+  isEditingThis,
+  supName,
+  supLogo,
+  badgeType,
+  badgeLabel,
+  editQtyValue,
+  inlineQtyError,
+  onToggleSelect,
+  onRowHover,
+  onRowFocus,
+  onRowClick,
+  onStartEdit,
+  onInlineQtyChange,
+  onCommitInlineQty,
+  onCancelInlineQty,
+  onNavigateNext,
+  onNavigatePrev,
+}) {
+  return (
+    <tr
+      key={prod.id}
+      data-row-index={pageIdx}
+      className={`pr ${prod.selected ? 'sel' : ''} ${isRowFocused ? 'focused' : ''} ${isOrdered ? 'is-ordered' : ''} ${hasPendingEdit ? 'has-pending' : ''}`}
+      tabIndex={0}
+      onMouseEnter={() => onRowHover(pageIdx)}
+      onFocus={() => onRowFocus(pageIdx)}
+      onClick={() => onRowClick(pageIdx)}
+    >
+      <td className="col-chk">
+        <input
+          type="checkbox"
+          className="cb"
+          checked={!!prod.selected}
+          onChange={() => onToggleSelect(prod.id)}
+          aria-label={`Select ${prod.name}`}
+          tabIndex={-1}
+        />
+      </td>
+      <td className="col-id">
+        <span className="prod-id-code">{prod.id}</span>
+      </td>
+      <td className="col-sku">
+        <span className="sku-lbl">{prod.sku}</span>
+      </td>
+      <td className="col-name">
+        <div className="prod-name">{prod.name}</div>
+      </td>
+      <td className="col-sup">
+        <div className="sup-cell-content">
+          {supLogo && (
+            <img
+              src={supLogo}
+              alt=""
+              className="sup-cell-logo"
+            />
+          )}
+          <span className="sup-cell-name" title={supName}>
+            {supName}
+          </span>
+        </div>
+      </td>
+      <td className="col-cat">
+        <span className="cat-cell-tag">{prod.category}</span>
+      </td>
+      <td className="col-stk">{prod.currentStock}</td>
+      <td className="col-tgt">{prod.safetyTarget}</td>
+      <td className="col-st">
+        <span className={`st-badge ${badgeType}`}>
+          <span className="st-dot"></span>
+          {badgeLabel}
+        </span>
+      </td>
+      <td className="col-qty">
+        {isEditingThis ? (
+          <div className="qty-wrap">
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className={`qty-inp ${inlineQtyError ? 'has-error' : ''}`}
+              value={editQtyValue}
+              onChange={(e) => onInlineQtyChange(e.target.value)}
+              onBlur={() => onCommitInlineQty(prod.sku)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  onCommitInlineQty(prod.sku);
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onCancelInlineQty();
+                } else if (e.key === 'Tab') {
+                  e.preventDefault();
+                  const success = onCommitInlineQty(prod.sku);
+                  if (success) {
+                    if (e.shiftKey) {
+                      onNavigatePrev(pageIdx);
+                    } else {
+                      onNavigateNext(pageIdx);
+                    }
+                  }
+                } else if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  const success = onCommitInlineQty(prod.sku);
+                  if (success) {
+                    onNavigateNext(pageIdx);
+                  }
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  const success = onCommitInlineQty(prod.sku);
+                  if (success) {
+                    onNavigatePrev(pageIdx);
+                  }
+                }
+              }}
+              autoFocus
+              aria-label="Order Quantity"
+              aria-invalid={!!inlineQtyError}
+              aria-describedby={inlineQtyError ? `inline-qty-err-${prod.sku}` : undefined}
+            />
+            {inlineQtyError && (
+              <div
+                id={`inline-qty-err-${prod.sku}`}
+                className="field-error inline-qty-error"
+                role="alert"
+                style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px', whiteSpace: 'nowrap' }}
+              >
+                {inlineQtyError}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="qty-cell-content" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <button
+              type="button"
+              tabIndex={-1}
+              className={`qty-disp ${numericQty === 0 ? 'qty-zero' : ''} ${hasPendingEdit ? 'qty-pending' : ''}`}
+              onClick={() => onStartEdit(pageIdx, prod.sku, hasPendingEdit ? pendingVal : String(prod.orderQty))}
+              title="Click to edit quantity"
+            >
+              {displayQty}
+            </button>
+            {hasPendingEdit && (
+              <span className="qty-unsaved-badge" title="Pending unsaved change (click Save All to commit)">
+                Unsaved
+              </span>
+            )}
+          </div>
+        )}
+      </td>
+      <td className="col-prc">
+        {formatCurrency(prod.unitCost)}
+      </td>
+      <td className="col-sub">
+        {formatCurrency(lineSubtotal)}
+      </td>
+    </tr>
+  );
+});
+
 export default function ReplenishmentPage({
   onNavigateToManifests,
   onNavigateToSuppliers,
@@ -340,6 +511,7 @@ export default function ReplenishmentPage({
   const [selectedSupplierId, setSelectedSupplierId] = useState(() => initialSupplierFilter || 'hf');
   const [activeQueueSupplierId, setActiveQueueSupplierId] = useState(() => initialSupplierFilter || null);
   const [searchTerm, setSearchTerm] = useState('');
+  const deferredSearchTerm = useDeferredValue(searchTerm);
 
   // Advanced Filter Modal State
   const [appliedFilters, setAppliedFilters] = useState({
@@ -484,6 +656,9 @@ export default function ReplenishmentPage({
   const [focusedRowIndex, setFocusedRowIndex] = useState(0);
   const searchInputRef = useRef(null);
   const tableRef = useRef(null);
+  const tblWrapRef = useRef(null);
+  const [tableScrollTop, setTableScrollTop] = useState(0);
+  const [tableViewportHeight, setTableViewportHeight] = useState(600);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -670,9 +845,9 @@ export default function ReplenishmentPage({
           return false;
         }
       }
-      // 2. Global search across SKU, product name, supplier name, category, and ID
-      if (searchTerm.trim()) {
-        const q = searchTerm.trim().toLowerCase();
+      // 2. Global search across SKU, product name, supplier name, category, and ID (deferred for 120 FPS typing)
+      if (deferredSearchTerm.trim()) {
+        const q = deferredSearchTerm.trim().toLowerCase();
         const supName = suppliersMap[p.supplierId]?.name?.toLowerCase() || '';
         const match =
           (p.name && p.name.toLowerCase().includes(q)) ||
@@ -703,7 +878,7 @@ export default function ReplenishmentPage({
 
       return true;
     });
-  }, [products, appliedFilters, searchTerm, activeQueueSupplierId, suppliersMap, colFilters]);
+  }, [products, appliedFilters, deferredSearchTerm, activeQueueSupplierId, suppliersMap, colFilters]);
 
   // Display ordering: Subtotal (high to low / low to high) or default ascending Product ID
   const displayProducts = useMemo(() => {
@@ -780,6 +955,77 @@ export default function ReplenishmentPage({
   const paginatedProducts = useMemo(() => {
     return displayProducts.slice(startIndex, endIndex);
   }, [displayProducts, startIndex, endIndex]);
+
+  // ── Virtualization Calculation (Group C - Windowing) ────────────────────────
+  const ROW_HEIGHT = 42; // px per desktop table row
+  const OVERSCAN = 6;    // buffer rows above and below visible viewport
+
+  const isVirtualized = paginatedProducts.length > 15;
+  const totalPageRows = paginatedProducts.length;
+
+  const { virtualStartIndex, virtualEndIndex, topSpacerHeight, bottomSpacerHeight } = useMemo(() => {
+    if (!isVirtualized) {
+      return {
+        virtualStartIndex: 0,
+        virtualEndIndex: totalPageRows,
+        topSpacerHeight: 0,
+        bottomSpacerHeight: 0,
+      };
+    }
+    const start = Math.max(0, Math.floor(tableScrollTop / ROW_HEIGHT) - OVERSCAN);
+    const visibleCount = Math.ceil(tableViewportHeight / ROW_HEIGHT);
+    const end = Math.min(totalPageRows, start + visibleCount + OVERSCAN * 2);
+
+    return {
+      virtualStartIndex: start,
+      virtualEndIndex: end,
+      topSpacerHeight: start * ROW_HEIGHT,
+      bottomSpacerHeight: Math.max(0, (totalPageRows - end) * ROW_HEIGHT),
+    };
+  }, [isVirtualized, totalPageRows, tableScrollTop, tableViewportHeight]);
+
+  const visibleProducts = useMemo(() => {
+    if (!isVirtualized) return paginatedProducts;
+    return paginatedProducts.slice(virtualStartIndex, virtualEndIndex);
+  }, [isVirtualized, paginatedProducts, virtualStartIndex, virtualEndIndex]);
+
+  // Stable row interaction callbacks for MemoizedProductRow
+  const handleRowHover = useCallback((pageIdx) => {
+    if (navMode === 'keyboard') setNavMode('mouse');
+    setFocusedRowIndex(pageIdx);
+  }, [navMode]);
+
+  const handleRowFocus = useCallback((pageIdx) => {
+    setFocusedRowIndex(pageIdx);
+  }, []);
+
+  const handleRowClick = useCallback((pageIdx) => {
+    if (navMode === 'keyboard') setNavMode('mouse');
+    setFocusedRowIndex(pageIdx);
+  }, [navMode]);
+
+  const handleStartEdit = useCallback((pageIdx, sku, initialVal) => {
+    setFocusedRowIndex(pageIdx);
+    setEditingSku(sku);
+    setEditQtyValue(initialVal);
+    setInlineQtyError(null);
+  }, []);
+
+  const handleNavigateNextRow = useCallback((pageIdx) => {
+    setFocusedRowIndex((prev) => {
+      const total = paginatedProducts.length;
+      if (total <= 0) return 0;
+      return prev >= total - 1 ? 0 : prev + 1;
+    });
+  }, [paginatedProducts.length]);
+
+  const handleNavigatePrevRow = useCallback((pageIdx) => {
+    setFocusedRowIndex((prev) => {
+      const total = paginatedProducts.length;
+      if (total <= 0) return 0;
+      return prev <= 0 ? total - 1 : prev - 1;
+    });
+  }, [paginatedProducts.length]);
 
   // Safe page navigation with unsaved changes confirmation
   const handlePageChange = (newPage) => {
@@ -1040,7 +1286,7 @@ export default function ReplenishmentPage({
   };
 
   // Row selection toggle with Reorder Confirmation for Ordered items
-  const handleToggleSelect = (id) => {
+  const handleToggleSelect = useCallback((id) => {
     requestActionWithUnsavedCheck(async () => {
       const target = products.find((p) => p.id === id);
       if (!target) return;
@@ -1082,7 +1328,7 @@ export default function ReplenishmentPage({
         console.warn('Error updating item selection');
       }
     });
-  };
+  }, [products, acknowledgedReorders, requestActionWithUnsavedCheck]);
 
   // Reorder Confirmation Modal Handlers
   const handleConfirmReorder = async () => {
@@ -1172,14 +1418,14 @@ export default function ReplenishmentPage({
   };
 
   // Pending Inline Quantity Editing: Record edit without immediate SQLite commit
-  const handleInlineQtyChange = (val) => {
+  const handleInlineQtyChange = useCallback((val) => {
     const sanitized = sanitizeIntegerInput(val, 5);
     setEditQtyValue(sanitized);
     setIsUnsaved(true);
-    if (inlineQtyError) setInlineQtyError(null);
-  };
+    setInlineQtyError(null);
+  }, []);
 
-  const handleCommitInlineQtyToPending = (sku) => {
+  const handleCommitInlineQtyToPending = useCallback((sku) => {
     const check = validateOrderQtyInput(editQtyValue);
     if (!check.isValid) {
       setInlineQtyError(check.error);
@@ -1206,14 +1452,14 @@ export default function ReplenishmentPage({
     setEditingSku(null);
     setIsUnsaved(false);
     return true;
-  };
+  }, [editQtyValue, products]);
 
   // Cancel current row edit without erasing other rows' pending edits
-  const handleCancelCurrentInlineQty = () => {
+  const handleCancelCurrentInlineQty = useCallback(() => {
     setInlineQtyError(null);
     setEditingSku(null);
     setIsUnsaved(false);
-  };
+  }, []);
 
   // Save All behavior: Transactional commit of all pending quantity edits
   const handleConfirmSaveAll = async () => {
@@ -1808,10 +2054,57 @@ export default function ReplenishmentPage({
     };
   }, []);
 
+  // ── Virtualization scroll listener on .tbl-wrap (Group C - Windowing) ──────
+  useEffect(() => {
+    const el = tblWrapRef.current;
+    if (!el) return;
+
+    let rAF = null;
+    const handleScroll = () => {
+      if (rAF) cancelAnimationFrame(rAF);
+      rAF = requestAnimationFrame(() => {
+        setTableScrollTop(el.scrollTop);
+      });
+    };
+
+    const updateHeight = () => {
+      if (el.clientHeight > 0) {
+        setTableViewportHeight(el.clientHeight);
+      }
+    };
+
+    updateHeight();
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', updateHeight, { passive: true });
+    return () => {
+      if (rAF) cancelAnimationFrame(rAF);
+      el.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, []);
+
+  // Reset table scroll position when page or page size changes
+  useEffect(() => {
+    if (tblWrapRef.current) {
+      tblWrapRef.current.scrollTop = 0;
+      setTableScrollTop(0);
+    }
+  }, [currentPage, pageSize]);
+
   // Auto-scroll table into view when focused row changes via keyboard navigation
   useEffect(() => {
     if (focusedRowIndex === null || focusedRowIndex === undefined) return;
     if (navMode !== 'keyboard') return;
+    const wrap = tblWrapRef.current;
+    if (wrap) {
+      const rowTop = focusedRowIndex * 42;
+      const rowBottom = rowTop + 42;
+      if (rowTop < wrap.scrollTop) {
+        wrap.scrollTop = rowTop;
+      } else if (rowBottom > wrap.scrollTop + wrap.clientHeight) {
+        wrap.scrollTop = rowBottom - wrap.clientHeight;
+      }
+    }
     const rowEl = tableRef.current?.querySelector(`.pr[data-row-index="${focusedRowIndex}"]`);
     if (rowEl) {
       rowEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -3496,6 +3789,7 @@ export default function ReplenishmentPage({
 
               {isEffectiveHasResults && (
                 <div
+                  ref={tblWrapRef}
                   className="tbl-wrap"
                   onMouseMove={() => {
                     if (navMode === 'keyboard') setNavMode('mouse');
@@ -3594,7 +3888,17 @@ export default function ReplenishmentPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {paginatedProducts.map((prod, pageIdx) => {
+                      {topSpacerHeight > 0 && (
+                        <tr
+                          aria-hidden="true"
+                          className="virtual-spacer-row"
+                          style={{ height: `${topSpacerHeight}px`, border: 'none', background: 'transparent' }}
+                        >
+                          <td colSpan={12} style={{ padding: 0, border: 'none', height: `${topSpacerHeight}px`, background: 'transparent' }} />
+                        </tr>
+                      )}
+                      {visibleProducts.map((prod, index) => {
+                        const pageIdx = isVirtualized ? virtualStartIndex + index : index;
                         const isOrdered = prod.orderStatus === 'ordered';
                         const hasPendingEdit = pendingQtyEdits[prod.sku] !== undefined;
                         const pendingVal = pendingQtyEdits[prod.sku];
@@ -3611,159 +3915,46 @@ export default function ReplenishmentPage({
                           : prod.priority.charAt(0).toUpperCase() + prod.priority.slice(1);
 
                         return (
-                          <tr
+                          <MemoizedProductRow
                             key={prod.id}
-                            data-row-index={pageIdx}
-                            className={`pr ${prod.selected ? 'sel' : ''} ${isRowFocused ? 'focused' : ''} ${isOrdered ? 'is-ordered' : ''} ${hasPendingEdit ? 'has-pending' : ''}`}
-                            tabIndex={0}
-                            onMouseEnter={() => {
-                              if (navMode === 'keyboard') setNavMode('mouse');
-                              setFocusedRowIndex(pageIdx);
-                            }}
-                            onFocus={() => {
-                              setFocusedRowIndex(pageIdx);
-                            }}
-                            onClick={() => {
-                              if (navMode === 'keyboard') setNavMode('mouse');
-                              setFocusedRowIndex(pageIdx);
-                            }}
-                          >
-                            <td className="col-chk">
-                              <input
-                                type="checkbox"
-                                className="cb"
-                                checked={!!prod.selected}
-                                onChange={() => handleToggleSelect(prod.id)}
-                                aria-label={`Select ${prod.name}`}
-                                tabIndex={-1}
-                              />
-                            </td>
-                            <td className="col-id">
-                              <span className="prod-id-code">{prod.id}</span>
-                            </td>
-                            <td className="col-sku">
-                              <span className="sku-lbl">{prod.sku}</span>
-                            </td>
-                            <td className="col-name">
-                              <div className="prod-name">{prod.name}</div>
-                            </td>
-                            <td className="col-sup">
-                              <div className="sup-cell-content">
-                                {SUPPLIER_LOGOS[prod.supplierId] && (
-                                  <img
-                                    src={SUPPLIER_LOGOS[prod.supplierId]}
-                                    alt=""
-                                    className="sup-cell-logo"
-                                  />
-                                )}
-                                <span className="sup-cell-name" title={sup?.name || prod.supplierId}>
-                                  {sup?.name || prod.supplierId}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="col-cat">
-                              <span className="cat-cell-tag">{prod.category}</span>
-                            </td>
-                            <td className="col-stk">{prod.currentStock}</td>
-                            <td className="col-tgt">{prod.safetyTarget}</td>
-                            <td className="col-st">
-                              <span className={`st-badge ${badgeType}`}>
-                                <span className="st-dot"></span>
-                                {badgeLabel}
-                              </span>
-                            </td>
-                            <td className="col-qty">
-                              {isEditingThis ? (
-                                <div className="qty-wrap">
-                                  <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    className={`qty-inp ${inlineQtyError ? 'has-error' : ''}`}
-                                    value={editQtyValue}
-                                    onChange={(e) => handleInlineQtyChange(e.target.value)}
-                                    onBlur={() => handleCommitInlineQtyToPending(prod.sku)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        handleCommitInlineQtyToPending(prod.sku);
-                                      } else if (e.key === 'Escape') {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        handleCancelCurrentInlineQty();
-                                      } else if (e.key === 'Tab') {
-                                        e.preventDefault();
-                                        const success = handleCommitInlineQtyToPending(prod.sku);
-                                        if (success) {
-                                          if (e.shiftKey) {
-                                            setFocusedRowIndex((prev) => (prev <= 0 ? paginatedProducts.length - 1 : prev - 1));
-                                          } else {
-                                            setFocusedRowIndex((prev) => (prev >= paginatedProducts.length - 1 ? 0 : prev + 1));
-                                          }
-                                        }
-                                      } else if (e.key === 'ArrowDown') {
-                                        e.preventDefault();
-                                        const success = handleCommitInlineQtyToPending(prod.sku);
-                                        if (success) {
-                                          setFocusedRowIndex((prev) => (prev >= paginatedProducts.length - 1 ? 0 : prev + 1));
-                                        }
-                                      } else if (e.key === 'ArrowUp') {
-                                        e.preventDefault();
-                                        const success = handleCommitInlineQtyToPending(prod.sku);
-                                        if (success) {
-                                          setFocusedRowIndex((prev) => (prev <= 0 ? paginatedProducts.length - 1 : prev - 1));
-                                        }
-                                      }
-                                    }}
-                                    autoFocus
-                                    aria-label="Order Quantity"
-                                    aria-invalid={!!inlineQtyError}
-                                    aria-describedby={inlineQtyError ? `inline-qty-err-${prod.sku}` : undefined}
-                                  />
-                                  {inlineQtyError && (
-                                    <div
-                                      id={`inline-qty-err-${prod.sku}`}
-                                      className="field-error inline-qty-error"
-                                      role="alert"
-                                      style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px', whiteSpace: 'nowrap' }}
-                                    >
-                                      {inlineQtyError}
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="qty-cell-content" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                  <button
-                                    type="button"
-                                    tabIndex={-1}
-                                    className={`qty-disp ${numericQty === 0 ? 'qty-zero' : ''} ${hasPendingEdit ? 'qty-pending' : ''}`}
-                                    onClick={() => {
-                                      setFocusedRowIndex(pageIdx);
-                                      setEditingSku(prod.sku);
-                                      setEditQtyValue(hasPendingEdit ? pendingVal : String(prod.orderQty));
-                                      setInlineQtyError(null);
-                                    }}
-                                    title="Click to edit quantity"
-                                  >
-                                    {displayQty}
-                                  </button>
-                                  {hasPendingEdit && (
-                                    <span className="qty-unsaved-badge" title="Pending unsaved change (click Save All to commit)">
-                                      Unsaved
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            </td>
-                            <td className="col-prc">
-                              {formatCurrency(prod.unitCost)}
-                            </td>
-                            <td className="col-sub">
-                              {formatCurrency(lineSubtotal)}
-                            </td>
-                          </tr>
+                            prod={prod}
+                            pageIdx={pageIdx}
+                            isRowFocused={isRowFocused}
+                            isOrdered={isOrdered}
+                            hasPendingEdit={hasPendingEdit}
+                            pendingVal={pendingVal}
+                            displayQty={displayQty}
+                            numericQty={numericQty}
+                            lineSubtotal={lineSubtotal}
+                            isEditingThis={isEditingThis}
+                            supName={sup?.name || prod.supplierId}
+                            supLogo={SUPPLIER_LOGOS[prod.supplierId]}
+                            badgeType={badgeType}
+                            badgeLabel={badgeLabel}
+                            editQtyValue={isEditingThis ? editQtyValue : ''}
+                            inlineQtyError={isEditingThis ? inlineQtyError : null}
+                            onToggleSelect={handleToggleSelect}
+                            onRowHover={handleRowHover}
+                            onRowFocus={handleRowFocus}
+                            onRowClick={handleRowClick}
+                            onStartEdit={handleStartEdit}
+                            onInlineQtyChange={handleInlineQtyChange}
+                            onCommitInlineQty={handleCommitInlineQtyToPending}
+                            onCancelInlineQty={handleCancelCurrentInlineQty}
+                            onNavigateNext={handleNavigateNextRow}
+                            onNavigatePrev={handleNavigatePrevRow}
+                          />
                         );
                       })}
+                      {bottomSpacerHeight > 0 && (
+                        <tr
+                          aria-hidden="true"
+                          className="virtual-spacer-row"
+                          style={{ height: `${bottomSpacerHeight}px`, border: 'none', background: 'transparent' }}
+                        >
+                          <td colSpan={12} style={{ padding: 0, border: 'none', height: `${bottomSpacerHeight}px`, background: 'transparent' }} />
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>

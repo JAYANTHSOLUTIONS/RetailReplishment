@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import '../../styles/replenishment.css';
 import { fetchAllManifests, updateManifestStatus } from '../../db/queries.js';
 import ThemeSwitcher from '../../components/ui/ThemeSwitcher.jsx';
@@ -14,6 +14,7 @@ export default function ManifestsPage({
   const [manifests, setManifests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const deferredSearchTerm = useDeferredValue(searchTerm);
   const [statusFilter, setStatusFilter] = useState('all');
   const [supplierFilter, setSupplierFilter] = useState('all');
   const [expandedManifestId, setExpandedManifestId] = useState(null);
@@ -124,8 +125,14 @@ export default function ManifestsPage({
     loadManifests();
   }, []);
 
-  // Update status (e.g. deliver manifest -> updates inventory table & rules)
+  // Update status with optimistic UI update (instant feedback with rollback on error)
   const handleStatusChange = async (manifestId, newStatus) => {
+    const previousManifests = manifests;
+    // Optimistic state update: switch status immediately so UI updates instantaneously
+    setManifests((prev) =>
+      prev.map((m) => (m.id === manifestId ? { ...m, status: newStatus } : m))
+    );
+
     try {
       setUpdatingId(manifestId);
       await updateManifestStatus(manifestId, newStatus);
@@ -137,6 +144,8 @@ export default function ManifestsPage({
       );
       await loadManifests();
     } catch (err) {
+      // Revert on failure
+      setManifests(previousManifests);
       console.error('[ManifestsPage] Error updating status:', err);
       showToast('Failed to update status in database.', 'error');
     } finally {
@@ -144,7 +153,7 @@ export default function ManifestsPage({
     }
   };
 
-  // Filtered manifests
+  // Filtered manifests (using deferredSearchTerm for 120 FPS typing performance)
   const filteredManifests = useMemo(() => {
     return manifests.filter((m) => {
       if (statusFilter !== 'all' && m.status !== statusFilter) {
@@ -153,8 +162,8 @@ export default function ManifestsPage({
       if (supplierFilter !== 'all' && m.supplierId !== supplierFilter) {
         return false;
       }
-      if (!searchTerm.trim()) return true;
-      const q = searchTerm.toLowerCase();
+      if (!deferredSearchTerm.trim()) return true;
+      const q = deferredSearchTerm.toLowerCase();
       const matchManifestNo = (m.manifestNo || '').toLowerCase().includes(q);
       const matchSupplier = (m.supplierName || '').toLowerCase().includes(q);
       const matchCarrier = (m.carrier || '').toLowerCase().includes(q);
@@ -163,7 +172,7 @@ export default function ManifestsPage({
       );
       return matchManifestNo || matchSupplier || matchCarrier || matchItems;
     });
-  }, [manifests, statusFilter, supplierFilter, searchTerm]);
+  }, [manifests, statusFilter, supplierFilter, deferredSearchTerm]);
 
   return (
     <div className="redesign-page-shell">

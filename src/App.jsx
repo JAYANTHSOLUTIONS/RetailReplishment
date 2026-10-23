@@ -1,8 +1,48 @@
-import React, { useState, useEffect } from 'react';
-import ReplenishmentPage from './features/replenishment/ReplenishmentPage.jsx';
-import ManifestsPage from './features/manifests/ManifestsPage.jsx';
-import SuppliersPage from './features/suppliers/SuppliersPage.jsx';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { fetchAppSetting, saveAppSetting } from './db/queries.js';
+
+// Route-level code splitting with React.lazy
+const ReplenishmentPage = lazy(() => import('./features/replenishment/ReplenishmentPage.jsx'));
+const ManifestsPage = lazy(() => import('./features/manifests/ManifestsPage.jsx'));
+const SuppliersPage = lazy(() => import('./features/suppliers/SuppliersPage.jsx'));
+
+// Accessible, lightweight loading fallback
+function PageFallback() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        width: '100vw',
+        background: 'var(--app-background, #f8fafc)',
+        color: 'var(--text, #0f172a)',
+        flexDirection: 'column',
+        gap: 12,
+        fontFamily: "'Inter', sans-serif",
+      }}
+      role="status"
+      aria-live="polite"
+    >
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          border: '3px solid var(--border, #e2e8f0)',
+          borderTopColor: 'var(--brand, #2563eb)',
+          borderRadius: '50%',
+          animation: 'spin 0.75s linear infinite',
+        }}
+        aria-hidden="true"
+      />
+      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2, #475569)' }}>
+        Loading StockDesk workspace...
+      </span>
+      <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
 
 export default function App() {
   const [targetSupplierFilter, setTargetSupplierFilter] = useState(null);
@@ -107,35 +147,33 @@ export default function App() {
     window.history.pushState({ page, ...options }, '', targetUrl);
   };
 
-  if (currentPage === 'manifests') {
-    return (
-      <ManifestsPage
-        themePreference={themePreference}
-        onThemeChange={handleThemeChange}
-        onNavigateBack={() => navigateTo('replenishment')}
-        onNavigateTo={(page, opts) => navigateTo(page, opts)}
-      />
-    );
-  }
-
-  if (currentPage === 'suppliers') {
-    return (
-      <SuppliersPage
-        themePreference={themePreference}
-        onThemeChange={handleThemeChange}
-        onNavigateBack={() => navigateTo('replenishment')}
-        onNavigateTo={(page, opts) => navigateTo(page, opts)}
-      />
-    );
-  }
-
   return (
-    <ReplenishmentPage
-      themePreference={themePreference}
-      onThemeChange={handleThemeChange}
-      onNavigateToManifests={() => navigateTo('manifests')}
-      onNavigateToSuppliers={() => navigateTo('suppliers')}
-      initialSupplierFilter={targetSupplierFilter}
-    />
+    <Suspense fallback={<PageFallback />}>
+      {currentPage === 'manifests' && (
+        <ManifestsPage
+          themePreference={themePreference}
+          onThemeChange={handleThemeChange}
+          onNavigateBack={() => navigateTo('replenishment')}
+          onNavigateTo={(page, opts) => navigateTo(page, opts)}
+        />
+      )}
+      {currentPage === 'suppliers' && (
+        <SuppliersPage
+          themePreference={themePreference}
+          onThemeChange={handleThemeChange}
+          onNavigateBack={() => navigateTo('replenishment')}
+          onNavigateTo={(page, opts) => navigateTo(page, opts)}
+        />
+      )}
+      {currentPage === 'replenishment' && (
+        <ReplenishmentPage
+          themePreference={themePreference}
+          onThemeChange={handleThemeChange}
+          onNavigateToManifests={() => navigateTo('manifests')}
+          onNavigateToSuppliers={() => navigateTo('suppliers')}
+          initialSupplierFilter={targetSupplierFilter}
+        />
+      )}
+    </Suspense>
   );
 }

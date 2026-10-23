@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import '../../styles/replenishment.css';
 import { fetchSuppliers, fetchProductCounts } from '../../db/queries.js';
 import ThemeSwitcher from '../../components/ui/ThemeSwitcher.jsx';
@@ -17,6 +17,7 @@ export default function SuppliersPage({
   const [productCounts, setProductCounts] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const deferredSearchTerm = useDeferredValue(searchTerm);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [selectedSupplierId, setSelectedSupplierId] = useState('hf');
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
@@ -152,14 +153,14 @@ export default function SuppliersPage({
     return Array.from(set).sort();
   }, [suppliers]);
 
-  // Filtered suppliers
+  // Filtered suppliers (using deferredSearchTerm for 120 FPS typing performance)
   const filteredSuppliers = useMemo(() => {
     return suppliers.filter((s) => {
       if (categoryFilter !== 'all' && s.category !== categoryFilter) {
         return false;
       }
-      if (!searchTerm.trim()) return true;
-      const q = searchTerm.toLowerCase();
+      if (!deferredSearchTerm.trim()) return true;
+      const q = deferredSearchTerm.toLowerCase();
       const matchName = (s.name || '').toLowerCase().includes(q);
       const matchCat = (s.category || '').toLowerCase().includes(q);
       const matchRep = (s.contactRep || '').toLowerCase().includes(q);
@@ -167,7 +168,7 @@ export default function SuppliersPage({
       const matchCity = 'central distribution hub'.includes(q);
       return matchName || matchCat || matchRep || matchId || matchCity;
     });
-  }, [suppliers, categoryFilter, searchTerm]);
+  }, [suppliers, categoryFilter, deferredSearchTerm]);
 
   // Action: Replenish -> navigate to replenishment desk with supplier filter
   const handleReplenishSupplier = (supplierId) => {
