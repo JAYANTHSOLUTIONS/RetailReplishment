@@ -313,27 +313,61 @@ export async function getDatabase() {
   return initPromise;
 }
 
+const DB_TIMEOUT_MS = 12000;
+
+function checkNetworkStatus() {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new Error('Network offline: Please check your internet connection and try again.');
+  }
+}
+
+function withTimeout(promise, ms = DB_TIMEOUT_MS, operation = 'Database operation') {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${operation} timed out after ${ms / 1000}s. Please retry.`));
+    }, ms);
+    promise
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 export function isOPFSEnabled() {
   return isOpfsActive;
 }
 
 export async function runQuery(sql, bind = []) {
-  const db = await getDatabase();
-  return db.selectObjects(sql, bind);
+  checkNetworkStatus();
+  return withTimeout((async () => {
+    const db = await getDatabase();
+    return db.selectObjects(sql, bind);
+  })(), DB_TIMEOUT_MS, 'Database query');
 }
 
 export async function runExecute(sql, bind = []) {
-  const db = await getDatabase();
-  db.exec({ sql, bind });
-  schedulePersistence();
+  checkNetworkStatus();
+  return withTimeout((async () => {
+    const db = await getDatabase();
+    db.exec({ sql, bind });
+    schedulePersistence();
+  })(), DB_TIMEOUT_MS, 'Database execution');
 }
 
 export async function runTransaction(callback) {
-  const db = await getDatabase();
-  let result;
-  db.transaction(() => {
-    result = callback(db);
-  });
-  schedulePersistence();
-  return result;
+  checkNetworkStatus();
+  return withTimeout((async () => {
+    const db = await getDatabase();
+    let result;
+    db.transaction(() => {
+      result = callback(db);
+    });
+    schedulePersistence();
+    return result;
+  })(), DB_TIMEOUT_MS, 'Database transaction');
 }

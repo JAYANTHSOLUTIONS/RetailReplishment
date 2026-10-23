@@ -50,7 +50,7 @@ export default function SupplierQueueRail({
 
       <div
         className="collapse-horizontal-inner"
-        inert={!sqExpanded ? '' : undefined}
+        inert={!sqExpanded ? true : undefined}
       >
         <div className="sq-head">
           <div className="sq-head-l d-flex align-items-center gap-2">

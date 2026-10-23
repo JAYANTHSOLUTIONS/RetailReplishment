@@ -5,16 +5,13 @@ import { fetchInventory, fetchSuppliers, fetchAllManifests, fetchPOHistory } fro
 import ReplenishmentTopbar from '../replenishment/components/ReplenishmentTopbar.jsx';
 import KeyboardShortcutsModal from '../../components/ui/KeyboardShortcutsModal.jsx';
 
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import StorefrontIcon from '@mui/icons-material/Storefront';
-import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
-import BarChartIcon from '@mui/icons-material/BarChart';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import LogoutIcon from '@mui/icons-material/Logout';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import AppNavigationRail from '../../components/layout/AppNavigationRail.jsx';
 
 const formatCurrency = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
 
@@ -128,76 +125,17 @@ export default function DashboardPage({
 
       <div className="redesign-page-body">
         {/* Left Icon Navigation Rail */}
-        <nav
-          className="icon-nav"
-          aria-label="Main navigation rail"
-          style={{
-            width: 52,
-            flexShrink: 0,
-            minHeight: 'calc(100vh - 56px)',
-            position: 'sticky',
-            top: 56,
-            height: 'calc(100vh - 56px)',
-            zIndex: 30,
-          }}
-        >
-          <div className="icon-nav-list">
-            <button
-              className="icon-nav-btn active"
-              title="Executive Dashboard"
-              aria-current="page"
-              aria-label="Executive Dashboard"
-            >
-              <DashboardIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn"
-              title="Replenishment Desk"
-              onClick={() => onNavigateTo('replenishment')}
-              aria-label="Replenishment Desk"
-            >
-              <AssignmentIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn"
-              title="Inbound Delivery Manifests"
-              onClick={() => onNavigateTo('manifests')}
-              aria-label="Inbound Delivery Manifests"
-            >
-              <LocalShippingIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn"
-              title="Suppliers Directory"
-              onClick={() => onNavigateTo('suppliers')}
-              aria-label="Suppliers Directory"
-            >
-              <StorefrontIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn"
-              title="Purchase Order History"
-              onClick={() => onNavigateTo('history')}
-              aria-label="Purchase Order History"
-            >
-              <ReceiptLongIcon style={{ fontSize: 20 }} />
-            </button>
-            <button className="icon-nav-btn" title="Analytics" aria-label="Analytics">
-              <BarChartIcon style={{ fontSize: 20 }} />
-            </button>
-          </div>
-          <div className="icon-nav-bottom">
-            <button
-              className="icon-nav-btn"
-              title="Sign Out"
-              onClick={onLogout}
-              aria-label="Sign Out"
-              style={{ color: '#ef4444' }}
-            >
-              <LogoutIcon style={{ fontSize: 20 }} />
-            </button>
-          </div>
-        </nav>
+        <aside className="redesign-sidebar">
+          <AppNavigationRail
+            activePage="dashboard"
+            onNavigateTo={onNavigateTo}
+            onNavigateToDashboard={() => {}}
+            onNavigateToReplenishment={() => onNavigateTo('replenishment')}
+            onNavigateToManifests={() => onNavigateTo('manifests')}
+            onNavigateToSuppliers={() => onNavigateTo('suppliers')}
+            onNavigateToHistory={() => onNavigateTo('history')}
+          />
+        </aside>
 
         {/* Main Content */}
         <main
@@ -243,6 +181,17 @@ export default function DashboardPage({
                 <span>Open Replenishment Desk</span>
                 <ArrowForwardIcon style={{ fontSize: 16, marginLeft: 6 }} />
               </button>
+              {onLogout && (
+                <button
+                  type="button"
+                  className="redesign-action-btn secondary"
+                  onClick={onLogout}
+                  style={{ padding: '8px 14px', fontSize: 13, color: '#ef4444' }}
+                  title="Sign out of operations"
+                >
+                  Sign Out
+                </button>
+              )}
             </div>
           </div>
 

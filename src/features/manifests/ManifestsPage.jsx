@@ -6,15 +6,8 @@ import KeyboardShortcutsModal from '../../components/ui/KeyboardShortcutsModal.j
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
 
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import Inventory2Icon from '@mui/icons-material/Inventory2';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import StorefrontIcon from '@mui/icons-material/Storefront';
-import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
-import BarChartIcon from '@mui/icons-material/BarChart';
-import SettingsIcon from '@mui/icons-material/Settings';
 import SearchIcon from '@mui/icons-material/Search';
+import AppNavigationRail from '../../components/layout/AppNavigationRail.jsx';
 
 export default function ManifestsPage({
   onNavigateBack,
@@ -220,6 +213,9 @@ export default function ManifestsPage({
         onNavigateToSuppliers={() => {
           if (onNavigateTo) onNavigateTo('suppliers');
         }}
+        onNavigateToDashboard={() => {
+          if (onNavigateTo) onNavigateTo('dashboard');
+        }}
         onNavigateToHistory={() => {
           if (onNavigateTo) onNavigateTo('history');
         }}
@@ -230,51 +226,16 @@ export default function ManifestsPage({
       {/* ─── Body: Left Icon Rail + Main Content ────────────────────────────── */}
       <div className="redesign-page-body">
         {/* Left Icon Navigation Rail */}
-        <nav className="icon-nav" aria-label="Main navigation rail" style={{ width: 52, flexShrink: 0, minHeight: 'calc(100vh - 56px)', position: 'sticky', top: 56, height: 'calc(100vh - 56px)', zIndex: 30 }}>
-          <div className="icon-nav-list">
-            <button className="icon-nav-btn" title="Dashboard" onClick={() => onNavigateTo && onNavigateTo('dashboard')} aria-label="Dashboard">
-              <DashboardIcon style={{ fontSize: 20 }} />
-            </button>
-            <button className="icon-nav-btn" title="Inventory Products" onClick={onNavigateBack} aria-label="Inventory Products">
-              <Inventory2Icon style={{ fontSize: 20 }} />
-            </button>
-            <button className="icon-nav-btn" title="Replenishment Desk" onClick={onNavigateBack} aria-label="Replenishment Desk">
-              <AssignmentIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn active"
-              title="Inbound Delivery Manifests"
-              aria-current="page"
-              aria-label="Inbound Delivery Manifests"
-            >
-              <LocalShippingIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn"
-              title="Suppliers Directory"
-              onClick={() => onNavigateTo && onNavigateTo('suppliers')}
-              aria-label="Suppliers Directory"
-            >
-              <StorefrontIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn"
-              title="Purchase Order History"
-              onClick={() => onNavigateTo && onNavigateTo('history')}
-              aria-label="Purchase Order History"
-            >
-              <ReceiptLongIcon style={{ fontSize: 20 }} />
-            </button>
-            <button className="icon-nav-btn" title="Analytics" aria-label="Analytics">
-              <BarChartIcon style={{ fontSize: 20 }} />
-            </button>
-          </div>
-          <div className="icon-nav-bottom">
-            <button className="icon-nav-btn" title="Settings" aria-label="Settings">
-              <SettingsIcon style={{ fontSize: 20 }} />
-            </button>
-          </div>
-        </nav>
+        <aside className="redesign-sidebar">
+          <AppNavigationRail
+            activePage="manifests"
+            onNavigateTo={onNavigateTo}
+            onNavigateToReplenishment={onNavigateBack}
+            onNavigateToDashboard={() => onNavigateTo && onNavigateTo('dashboard')}
+            onNavigateToSuppliers={() => onNavigateTo && onNavigateTo('suppliers')}
+            onNavigateToHistory={() => onNavigateTo && onNavigateTo('history')}
+          />
+        </aside>
 
         {/* Main Content Area */}
         <main id="main-content" className="redesign-main-content">

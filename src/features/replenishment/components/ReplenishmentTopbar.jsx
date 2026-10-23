@@ -1,5 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { ThemeSwitcher } from '../../../components/ui';
 
 export default function ReplenishmentTopbar({
@@ -15,6 +20,7 @@ export default function ReplenishmentTopbar({
   themePreference = 'system',
   handleSelectTheme = () => {},
   mainLogo = null,
+  onNavigateToDashboard = () => {},
   onNavigateToManifests = () => {},
   onNavigateToSuppliers = () => {},
   onNavigateToHistory = () => {},
@@ -342,13 +348,16 @@ export default function ReplenishmentTopbar({
 
             <div className="mobile-sidebar-nav-list">
               <div className="mobile-sidebar-section-title">Navigation</div>
-              <button type="button" className="mobile-sidebar-nav-item" onClick={() => setMobileSidebarOpen(false)}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              <button
+                type="button"
+                className={`mobile-sidebar-nav-item ${activePage === 'dashboard' ? 'active' : ''}`}
+                onClick={() => {
+                  setMobileSidebarOpen(false);
+                  if (onNavigateToDashboard) onNavigateToDashboard();
+                }}
+              >
+                <DashboardIcon style={{ fontSize: 18 }} />
                 <span>Dashboard</span>
-              </button>
-              <button type="button" className="mobile-sidebar-nav-item" onClick={() => setMobileSidebarOpen(false)}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                <span>Inventory</span>
               </button>
               <button
                 type="button"
@@ -358,7 +367,7 @@ export default function ReplenishmentTopbar({
                   if (onNavigateToReplenishment) onNavigateToReplenishment();
                 }}
               >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                <AssignmentIcon style={{ fontSize: 18 }} />
                 <span>Replenishment Desk</span>
               </button>
               <button
@@ -369,7 +378,7 @@ export default function ReplenishmentTopbar({
                   if (onNavigateToManifests) onNavigateToManifests();
                 }}
               >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                <LocalShippingIcon style={{ fontSize: 18 }} />
                 <span>Inbound Manifests</span>
               </button>
               <button
@@ -380,7 +389,7 @@ export default function ReplenishmentTopbar({
                   if (onNavigateToSuppliers) onNavigateToSuppliers();
                 }}
               >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <StorefrontIcon style={{ fontSize: 18 }} />
                 <span>Suppliers</span>
               </button>
               <button
@@ -391,12 +400,8 @@ export default function ReplenishmentTopbar({
                   if (onNavigateToHistory) onNavigateToHistory();
                 }}
               >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+                <ReceiptLongIcon style={{ fontSize: 18 }} />
                 <span>PO History</span>
-              </button>
-              <button type="button" className="mobile-sidebar-nav-item" onClick={() => setMobileSidebarOpen(false)}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                <span>Analytics</span>
               </button>
             </div>
 

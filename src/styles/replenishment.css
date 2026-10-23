@@ -162,7 +162,11 @@ body {
   padding: 0 18px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  z-index: 20;
+  position: sticky;
+  top: 0;
+  height: 56px;
+  box-sizing: border-box;
+  z-index: 1000;
 }
 
 .topbar-brand {
@@ -454,6 +458,14 @@ body {
   justify-content: space-between;
   padding: 14px 0;
   border-right: 1px solid var(--border);
+  position: sticky;
+  top: 56px;
+  height: calc(100vh - 56px);
+  min-width: 58px;
+  width: 58px;
+  box-sizing: border-box;
+  z-index: 900;
+  flex-shrink: 0;
 }
 .icon-nav-list {
   display: flex;
@@ -6793,6 +6805,19 @@ button, input, select, textarea, .btn-replenish, .btn-delivered-action {
   flex: 1;
   min-height: calc(100vh - 56px);
   width: 100%;
+}
+
+.redesign-sidebar {
+  width: 58px;
+  min-width: 58px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 56px;
+  height: calc(100vh - 56px);
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  z-index: 900;
+  display: flex;
 }
 
 .redesign-main-content {

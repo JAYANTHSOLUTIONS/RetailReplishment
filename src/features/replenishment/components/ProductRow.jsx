@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import PropTypes from 'prop-types';
+import EditIcon from '@mui/icons-material/Edit';
 import { StatusBadge } from '../../../components/ui';
 
 const ProductRow = memo(function ProductRow({
@@ -30,6 +31,7 @@ const ProductRow = memo(function ProductRow({
   onCancelInlineQty,
   onNavigateNext,
   onNavigatePrev,
+  onEditProduct,
 }) {
   return (
     <tr
@@ -166,6 +168,21 @@ const ProductRow = memo(function ProductRow({
       <td className="col-sub">
         {formatCurrency ? formatCurrency(lineSubtotal) : lineSubtotal}
       </td>
+      <td className="col-act" style={{ textAlign: 'center' }}>
+        <button
+          type="button"
+          className="btn-inline-edit"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onEditProduct) onEditProduct(prod);
+          }}
+          style={{ minHeight: 28, padding: '4px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center' }}
+          title={`Edit ${prod.name}`}
+          aria-label={`Edit ${prod.name}`}
+        >
+          <EditIcon style={{ fontSize: 13, marginRight: 4 }} /> Edit
+        </button>
+      </td>
     </tr>
   );
 });
@@ -209,6 +226,7 @@ ProductRow.propTypes = {
   onCancelInlineQty: PropTypes.func.isRequired,
   onNavigateNext: PropTypes.func.isRequired,
   onNavigatePrev: PropTypes.func.isRequired,
+  onEditProduct: PropTypes.func,
 };
 
 export default ProductRow;

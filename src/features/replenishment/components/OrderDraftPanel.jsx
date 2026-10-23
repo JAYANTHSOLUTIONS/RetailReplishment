@@ -51,7 +51,7 @@ export default function OrderDraftPanel({
 
       <div
         className="collapse-horizontal-inner"
-        inert={!draftExpanded ? '' : undefined}
+        inert={!draftExpanded ? true : undefined}
       >
         <div className="po-head">
           <div className="po-head-l d-flex align-items-center gap-2">

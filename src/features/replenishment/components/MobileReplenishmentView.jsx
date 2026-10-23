@@ -1,4 +1,5 @@
 import PropTypes from 'prop-types';
+import EditIcon from '@mui/icons-material/Edit';
 import { ThemeSwitcher } from '../../../components/ui';
 import { sanitizeIntegerInput } from '../../../utils/validation';
 
@@ -49,6 +50,7 @@ export default function MobileReplenishmentView({
   editQtyValue,
   setEditQtyValue,
   handleMobileCardQtyChange,
+  onEditProduct = () => {},
   formatCurrency,
   supplierLogos = {},
   pageSize,
@@ -607,6 +609,16 @@ export default function MobileReplenishmentView({
                     <div className="mpc-price-wrapper">
                       <span className="mpc-unit-price">Unit: {formatCurrency(prod.unitCost)}</span>
                       <span className="mpc-line-total">{formatCurrency(lineSubtotal)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 6 }}>
+                      <button
+                        type="button"
+                        className="btn-inline-edit"
+                        onClick={() => onEditProduct && onEditProduct(prod)}
+                        style={{ minHeight: 28, padding: '3px 10px', fontSize: 11, display: 'inline-flex', alignItems: 'center' }}
+                      >
+                        <EditIcon style={{ fontSize: 13, marginRight: 3 }} /> Edit Product
+                      </button>
                     </div>
                   </div>
                 </div>

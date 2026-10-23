@@ -44,15 +44,7 @@ import {
   ColumnFilterDropdown,
 } from './components';
 import useReplenishmentShortcuts from './hooks/useReplenishmentShortcuts.js';
-
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import Inventory2Icon from '@mui/icons-material/Inventory2';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import StorefrontIcon from '@mui/icons-material/Storefront';
-import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
-import BarChartIcon from '@mui/icons-material/BarChart';
-import SettingsIcon from '@mui/icons-material/Settings';
+import AppNavigationRail from '../../components/layout/AppNavigationRail.jsx';
 
 // Helper currency formatter
 const formatCurrency = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
@@ -965,12 +957,39 @@ export default function ReplenishmentPage({
   };
 
   // Product created handler
+  const [productToEdit, setProductToEdit] = useState(null);
+
+  const handleOpenEditProduct = (prod) => {
+    setProductToEdit(prod);
+    setAddProductModalOpen(true);
+  };
+
+  const handleProductUpdated = async (updatedProduct) => {
+    try {
+      const updated = await fetchInventory();
+      setProducts(updated);
+      const cats = await fetchCategories();
+      setCategories(cats);
+      showToast(`Product "${updatedProduct.name}" edited successfully!`, 'success');
+      setProductToEdit(null);
+    } catch (err) {
+      console.error('Failed to refresh after product update:', err);
+      showToast(err.message || 'Error updating product.', 'error');
+    }
+  };
+
   const handleProductCreated = async (newProduct) => {
-    const updated = await fetchInventory();
-    setProducts(updated);
-    const cats = await fetchCategories();
-    setCategories(cats);
-    showToast(`Product "${newProduct.name}" (${newProduct.sku}) created successfully.`);
+    try {
+      const updated = await fetchInventory();
+      setProducts(updated);
+      const cats = await fetchCategories();
+      setCategories(cats);
+      showToast(`Product "${newProduct.name}" (${newProduct.sku}) created successfully.`, 'success');
+      setProductToEdit(null);
+    } catch (err) {
+      console.error('Failed to refresh after product create:', err);
+      showToast(err.message || 'Error creating product.', 'error');
+    }
   };
 
   // Supplier created handler
@@ -1587,59 +1606,14 @@ export default function ReplenishmentPage({
       {/* ─── Main Workspace: 4-Column Layout with Smooth Side Animation ─── */}
       <div className="rp-body" style={gridColumns ? { gridTemplateColumns: gridColumns } : undefined}>
         {/* Col 1: Icon Navigation Rail */}
-        <nav className="icon-nav" aria-label="Main navigation rail">
-          <div className="icon-nav-list">
-            <button
-              className="icon-nav-btn"
-              title="Dashboard"
-              onClick={() => onNavigateToDashboard && onNavigateToDashboard()}
-              aria-label="Dashboard"
-            >
-              <DashboardIcon style={{ fontSize: 20 }} />
-            </button>
-            <button className="icon-nav-btn" title="Inventory Products" aria-label="Inventory Products">
-              <Inventory2Icon style={{ fontSize: 20 }} />
-            </button>
-            <button className="icon-nav-btn active" title="Replenishment Desk" aria-current="page" aria-label="Replenishment Desk">
-              <AssignmentIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn"
-              title="Inbound Delivery Manifests"
-              onClick={onNavigateToManifests}
-              aria-label="Inbound Delivery Manifests"
-            >
-              <LocalShippingIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn"
-              title="Suppliers Directory"
-              onClick={onNavigateToSuppliers}
-              aria-label="Suppliers Directory"
-            >
-              <StorefrontIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn"
-              title="Purchase Order History"
-              onClick={() => {
-                if (onNavigateToHistory) onNavigateToHistory();
-                else handleOpenPOHistory();
-              }}
-              aria-label="Purchase Order History"
-            >
-              <ReceiptLongIcon style={{ fontSize: 20 }} />
-            </button>
-            <button className="icon-nav-btn" title="Analytics" aria-label="Analytics">
-              <BarChartIcon style={{ fontSize: 20 }} />
-            </button>
-          </div>
-          <div className="icon-nav-bottom">
-            <button className="icon-nav-btn" title="Settings" aria-label="Settings">
-              <SettingsIcon style={{ fontSize: 20 }} />
-            </button>
-          </div>
-        </nav>
+        <AppNavigationRail
+          activePage="replenishment"
+          onNavigateToDashboard={onNavigateToDashboard}
+          onNavigateToReplenishment={() => {}}
+          onNavigateToManifests={onNavigateToManifests}
+          onNavigateToSuppliers={onNavigateToSuppliers}
+          onNavigateToHistory={onNavigateToHistory || handleOpenPOHistory}
+        />
 
         {/* Col 2: Supplier Queue Sidebar (Left Side of Table) - Desktop & Tablet only */}
         <SupplierQueueRail
@@ -1714,6 +1688,7 @@ export default function ReplenishmentPage({
               editQtyValue={editQtyValue}
               setEditQtyValue={setEditQtyValue}
               handleMobileCardQtyChange={handleMobileCardQtyChange}
+              onEditProduct={handleOpenEditProduct}
               formatCurrency={formatCurrency}
               supplierLogos={SUPPLIER_LOGOS}
               pageSize={pageSize}
@@ -1740,7 +1715,10 @@ export default function ReplenishmentPage({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <button
                       className="header-action-btn"
-                      onClick={() => setAddProductModalOpen(true)}
+                      onClick={() => {
+                        setProductToEdit(null);
+                        setAddProductModalOpen(true);
+                      }}
                       title="Add new product to catalog"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2169,6 +2147,9 @@ export default function ReplenishmentPage({
                             onClear={() => setColFilters((prev) => ({ ...prev, subtotalSort: '' }))}
                           />
                         </th>
+                        <th scope="col" className="col-act" style={{ width: 80, textAlign: 'center' }}>
+                          Edit
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2178,7 +2159,7 @@ export default function ReplenishmentPage({
                           className="virtual-spacer-row"
                           style={{ height: `${topSpacerHeight}px`, border: 'none', background: 'transparent' }}
                         >
-                          <td colSpan={12} style={{ padding: 0, border: 'none', height: `${topSpacerHeight}px`, background: 'transparent' }} />
+                          <td colSpan={13} style={{ padding: 0, border: 'none', height: `${topSpacerHeight}px`, background: 'transparent' }} />
                         </tr>
                       )}
                       {visibleProducts.map((prod, index) => {
@@ -2228,6 +2209,7 @@ export default function ReplenishmentPage({
                             onCancelInlineQty={handleCancelCurrentInlineQty}
                             onNavigateNext={handleNavigateNextRow}
                             onNavigatePrev={handleNavigatePrevRow}
+                            onEditProduct={handleOpenEditProduct}
                           />
                         );
                       })}
@@ -2237,7 +2219,7 @@ export default function ReplenishmentPage({
                           className="virtual-spacer-row"
                           style={{ height: `${bottomSpacerHeight}px`, border: 'none', background: 'transparent' }}
                         >
-                          <td colSpan={12} style={{ padding: 0, border: 'none', height: `${bottomSpacerHeight}px`, background: 'transparent' }} />
+                          <td colSpan={13} style={{ padding: 0, border: 'none', height: `${bottomSpacerHeight}px`, background: 'transparent' }} />
                         </tr>
                       )}
                     </tbody>
@@ -2465,13 +2447,18 @@ export default function ReplenishmentPage({
         products={products}
       />
 
-      {/* ─── Add Product Modal ─────────────────────────────────────────────── */}
+      {/* ─── Add / Edit Product Modal ─────────────────────────────────────── */}
       <AddProductModal
         isOpen={addProductModalOpen}
-        onClose={() => setAddProductModalOpen(false)}
+        onClose={() => {
+          setAddProductModalOpen(false);
+          setProductToEdit(null);
+        }}
         suppliers={suppliers}
         categories={categories}
+        productToEdit={productToEdit}
         onProductCreated={handleProductCreated}
+        onProductUpdated={handleProductUpdated}
       />
 
       {/* ─── Add Supplier Modal ────────────────────────────────────────────── */}

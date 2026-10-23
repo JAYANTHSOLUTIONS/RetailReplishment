@@ -234,8 +234,8 @@ export async function updateManifestStatus(manifestId, newStatus) {
       [manifestId]
     );
 
+    const mnf = db.selectObjects(`SELECT po_id FROM pending_manifests WHERE id = ?;`, [manifestId]);
     if (manifestItems.length === 0) {
-      const mnf = db.selectObjects(`SELECT po_id FROM pending_manifests WHERE id = ?;`, [manifestId]);
       if (mnf.length > 0 && mnf[0].po_id) {
         manifestItems = db.selectObjects(
           `SELECT product_id, sku, quantity FROM purchase_order_items WHERE po_id = ?;`,
@@ -256,6 +256,12 @@ export async function updateManifestStatus(manifestId, newStatus) {
           bind: [qty, item.product_id, item.sku],
         });
       }
+      if (mnf[0]?.po_id) {
+        db.exec({
+          sql: `UPDATE purchase_orders SET status = 'delivered', updated_at = datetime('now') WHERE id = ?;`,
+          bind: [mnf[0].po_id],
+        });
+      }
     } else if (newStatus === 'in_transit') {
       // Revert delivered status: subtract stock and restore ordered status
       for (const item of manifestItems) {
@@ -266,6 +272,12 @@ export async function updateManifestStatus(manifestId, newStatus) {
                     order_status = 'ordered'
                 WHERE id = ? OR sku = ?;`,
           bind: [qty, item.product_id, item.sku],
+        });
+      }
+      if (mnf[0]?.po_id) {
+        db.exec({
+          sql: `UPDATE purchase_orders SET status = 'submitted', updated_at = datetime('now') WHERE id = ?;`,
+          bind: [mnf[0].po_id],
         });
       }
     }
@@ -733,6 +745,60 @@ export async function createProduct(productData) {
     unitCost: parsedCost,
     selected: false,
     orderStatus: 'none',
+    priority,
+    status: priority,
+  };
+}
+
+// ── Update Product ──────────────────────────────────────────────────────────
+export async function updateProduct(productData) {
+  const { id, name, category, supplierId, currentStock, safetyTarget, unitCost, orderQty } = productData;
+  if (!id) throw new Error('Product ID is required for editing.');
+
+  const validation = validateProductForm({
+    name,
+    category,
+    currentStock,
+    safetyTarget,
+    unitCost,
+    orderQty: orderQty ?? 0,
+  });
+  if (!validation.isValid) {
+    throw new Error(Object.values(validation.errors).join(' '));
+  }
+
+  const parsedStock = parseInt(currentStock, 10);
+  const parsedTarget = parseInt(safetyTarget, 10);
+  const parsedCost = parseFloat(unitCost);
+
+  await runExecute(`
+    UPDATE inventory_items
+    SET name = ?,
+        category = ?,
+        supplier_id = COALESCE(?, supplier_id),
+        current_stock = ?,
+        safety_target = ?,
+        unit_cost = ?
+    WHERE id = ?;
+  `, [
+    name.trim(),
+    category.trim(),
+    supplierId ? supplierId.trim() : null,
+    parsedStock,
+    parsedTarget,
+    parsedCost,
+    id,
+  ]);
+
+  const priority = calculatePriority(parsedStock, parsedTarget);
+  return {
+    id,
+    name: name.trim(),
+    category: category.trim(),
+    supplierId: supplierId ? supplierId.trim() : undefined,
+    currentStock: parsedStock,
+    safetyTarget: parsedTarget,
+    unitCost: parsedCost,
     priority,
     status: priority,
   };

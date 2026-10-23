@@ -9,15 +9,9 @@ import Button from '../../components/ui/Button.jsx';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
 
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import Inventory2Icon from '@mui/icons-material/Inventory2';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import StorefrontIcon from '@mui/icons-material/Storefront';
-import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
-import BarChartIcon from '@mui/icons-material/BarChart';
-import SettingsIcon from '@mui/icons-material/Settings';
 import SearchIcon from '@mui/icons-material/Search';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AppNavigationRail from '../../components/layout/AppNavigationRail.jsx';
 
 const formatCurrency = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
 
@@ -203,63 +197,16 @@ export default function POHistoryPage({
       {/* ─── Body: Left Icon Rail + Main Content ────────────────────────────── */}
       <div className="redesign-page-body">
         {/* Left Icon Navigation Rail */}
-        <nav
-          className="icon-nav"
-          aria-label="Main navigation rail"
-          style={{
-            width: 52,
-            flexShrink: 0,
-            minHeight: 'calc(100vh - 56px)',
-            position: 'sticky',
-            top: 56,
-            height: 'calc(100vh - 56px)',
-            zIndex: 30,
-          }}
-        >
-          <div className="icon-nav-list">
-            <button className="icon-nav-btn" title="Dashboard" onClick={() => onNavigateTo && onNavigateTo('dashboard')} aria-label="Dashboard">
-              <DashboardIcon style={{ fontSize: 20 }} />
-            </button>
-            <button className="icon-nav-btn" title="Inventory Products" onClick={onNavigateBack} aria-label="Inventory Products">
-              <Inventory2Icon style={{ fontSize: 20 }} />
-            </button>
-            <button className="icon-nav-btn" title="Replenishment Desk" onClick={onNavigateBack} aria-label="Replenishment Desk">
-              <AssignmentIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn"
-              title="Inbound Delivery Manifests"
-              onClick={() => onNavigateTo && onNavigateTo('manifests')}
-              aria-label="Inbound Delivery Manifests"
-            >
-              <LocalShippingIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn"
-              title="Suppliers Directory"
-              onClick={() => onNavigateTo && onNavigateTo('suppliers')}
-              aria-label="Suppliers Directory"
-            >
-              <StorefrontIcon style={{ fontSize: 20 }} />
-            </button>
-            <button
-              className="icon-nav-btn active"
-              title="Purchase Order History"
-              aria-current="page"
-              aria-label="Purchase Order History"
-            >
-              <ReceiptLongIcon style={{ fontSize: 20 }} />
-            </button>
-            <button className="icon-nav-btn" title="Analytics" aria-label="Analytics">
-              <BarChartIcon style={{ fontSize: 20 }} />
-            </button>
-          </div>
-          <div className="icon-nav-bottom">
-            <button className="icon-nav-btn" title="Settings" aria-label="Settings">
-              <SettingsIcon style={{ fontSize: 20 }} />
-            </button>
-          </div>
-        </nav>
+        <aside className="redesign-sidebar">
+          <AppNavigationRail
+            activePage="history"
+            onNavigateTo={onNavigateTo}
+            onNavigateToReplenishment={onNavigateBack}
+            onNavigateToDashboard={() => onNavigateTo && onNavigateTo('dashboard')}
+            onNavigateToManifests={() => onNavigateTo && onNavigateTo('manifests')}
+            onNavigateToSuppliers={() => onNavigateTo && onNavigateTo('suppliers')}
+          />
+        </aside>
 
         {/* Main Content Area */}
         <main id="main-content" className="redesign-main-content">
@@ -412,6 +359,7 @@ export default function POHistoryPage({
                         const sup = supplierMap[po.supplierId];
                         const logoSrc = SUPPLIER_LOGOS[po.supplierId];
                         const isDraft = po.status === 'draft';
+                        const isDelivered = (po.status || '').toLowerCase() === 'delivered';
                         const itemsCount = po.items?.length || 0;
                         const totalUnits = po.items?.reduce((acc, it) => acc + (it.quantity || 0), 0) || 0;
 
@@ -518,6 +466,21 @@ export default function POHistoryPage({
                                   >
                                     📝 Draft
                                   </span>
+                                ) : isDelivered ? (
+                                  <span
+                                    className="pill-status-manifest pill-status-delivered"
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      padding: '3px 8px',
+                                      borderRadius: 12,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                    }}
+                                  >
+                                    ✓ Delivered
+                                  </span>
                                 ) : (
                                   <span
                                     style={{
@@ -558,20 +521,22 @@ export default function POHistoryPage({
                                       View Draft
                                     </button>
                                   ) : (
-                                    <span style={{ color: 'var(--text3)', fontSize: 12, paddingRight: 8 }}>
+                                    <span style={{ color: 'var(--text3)', fontSize: 12, paddingRight: 4 }}>
                                       —
                                     </span>
                                   )}
-                                  <button
-                                    type="button"
-                                    className="redesign-action-btn secondary"
-                                    onClick={() => setDeleteConfirmOrder(po)}
-                                    title={`Delete ${po.poNumber}`}
-                                    style={{ padding: '6px 8px', color: '#ef4444' }}
-                                    aria-label={`Delete ${po.poNumber}`}
-                                  >
-                                    🗑
-                                  </button>
+                                  {!isDelivered && (
+                                    <button
+                                      type="button"
+                                      className="redesign-action-btn secondary"
+                                      onClick={() => setDeleteConfirmOrder(po)}
+                                      title={`Delete ${po.poNumber}`}
+                                      style={{ padding: '6px 8px', color: '#ef4444' }}
+                                      aria-label={`Delete ${po.poNumber}`}
+                                    >
+                                      <DeleteIcon style={{ fontSize: 16 }} />
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -645,6 +610,7 @@ export default function POHistoryPage({
                   const sup = supplierMap[po.supplierId];
                   const logoSrc = SUPPLIER_LOGOS[po.supplierId];
                   const isDraft = po.status === 'draft';
+                  const isDelivered = (po.status || '').toLowerCase() === 'delivered';
                   return (
                     <div
                       key={po.id}
@@ -669,8 +635,12 @@ export default function POHistoryPage({
                           <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 10, background: 'rgba(217, 119, 6, 0.14)', color: '#d97706' }}>
                             Draft
                           </span>
-                        ) : (
+                        ) : isDelivered ? (
                           <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 10, background: 'rgba(16, 185, 129, 0.14)', color: '#059669' }}>
+                            Delivered
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 10, background: 'rgba(59, 130, 246, 0.14)', color: '#2563eb' }}>
                             Dispatched
                           </span>
                         )}
@@ -693,14 +663,16 @@ export default function POHistoryPage({
                             View Draft
                           </button>
                         )}
-                        <button
-                          type="button"
-                          className="redesign-action-btn secondary"
-                          style={{ color: '#ef4444' }}
-                          onClick={() => setDeleteConfirmOrder(po)}
-                        >
-                          Delete
-                        </button>
+                        {!isDelivered && (
+                          <button
+                            type="button"
+                            className="redesign-action-btn secondary"
+                            style={{ color: '#ef4444' }}
+                            onClick={() => setDeleteConfirmOrder(po)}
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

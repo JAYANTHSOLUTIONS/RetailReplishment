@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { createProduct, getNextProductIdentifiers } from '../../db/queries.js';
+import { createProduct, updateProduct, getNextProductIdentifiers } from '../../db/queries.js';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
 import { Modal, Button } from '../../components/ui';
 import {
@@ -11,36 +11,53 @@ import {
   sanitizeAlphaName,
 } from '../../utils/validation.js';
 
-export default function AddProductModal({
+function AddProductForm({
   isOpen,
   onClose,
   suppliers = [],
   categories = [],
-  onProductCreated,
+  onProductCreated = () => {},
+  productToEdit = null,
+  onProductUpdated = () => {},
 }) {
-  const [supplierId, setSupplierId] = useState(suppliers[0]?.id || 'hf');
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState(categories[0] || 'Dairy');
-  const [customCategory, setCustomCategory] = useState('');
-  const [currentStock, setCurrentStock] = useState('15');
-  const [safetyTarget, setSafetyTarget] = useState('50');
-  const [unitCost, setUnitCost] = useState('120');
-  const [orderQty, setOrderQty] = useState('0');
+  const isEditing = Boolean(productToEdit);
+  const [supplierId, setSupplierId] = useState(
+    () => productToEdit?.supplierId || suppliers[0]?.id || 'hf'
+  );
+  const [name, setName] = useState(() => productToEdit?.name || '');
+  const [category, setCategory] = useState(() => {
+    if (!productToEdit) return categories[0] || 'Dairy';
+    const existingCat = productToEdit.category || categories[0] || 'Dairy';
+    return categories.includes(existingCat) ? existingCat : '__custom__';
+  });
+  const [customCategory, setCustomCategory] = useState(() => {
+    if (!productToEdit) return '';
+    const existingCat = productToEdit.category || '';
+    return categories.includes(existingCat) ? '' : existingCat;
+  });
+  const [currentStock, setCurrentStock] = useState(() => String(productToEdit?.currentStock ?? 0));
+  const [safetyTarget, setSafetyTarget] = useState(() => String(productToEdit?.safetyTarget ?? 50));
+  const [unitCost, setUnitCost] = useState(() =>
+    String(productToEdit ? (productToEdit.unitCost ?? 0) : 120)
+  );
+  const [orderQty, setOrderQty] = useState(() => String(productToEdit?.orderQty ?? 0));
 
   // DB-Backed Auto Assigned Identifiers
-  const [autoId, setAutoId] = useState('');
-  const [autoSku, setAutoSku] = useState('');
+  const [autoId, setAutoId] = useState(() => productToEdit?.id || '');
+  const [autoSku, setAutoSku] = useState(() => productToEdit?.sku || '');
   const [loadingId, setLoadingId] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Auto-generate unique ID & SKU from SQLite DB whenever modal opens or supplier changes
+  // Auto-generate identifiers when supplierId changes for new products
   useEffect(() => {
-    if (!isOpen) return;
+    if (isEditing) return;
+
     let active = true;
     (async () => {
       try {
+        setLoadingId(true);
         const { nextId, nextSku } = await getNextProductIdentifiers(supplierId);
         if (active) {
           setAutoId(nextId);
@@ -56,7 +73,7 @@ export default function AddProductModal({
     return () => {
       active = false;
     };
-  }, [isOpen, supplierId]);
+  }, [supplierId, isEditing]);
 
   const clearFieldError = (field) => {
     if (errors[field] || errors.form) {
@@ -95,21 +112,39 @@ export default function AddProductModal({
     try {
       setIsSubmitting(true);
       setErrors({});
-      const created = await createProduct({
-        id: autoId,
-        sku: autoSku,
-        name: name.trim(),
-        supplierId,
-        category: chosenCategory,
-        currentStock: parseInt(currentStock, 10),
-        safetyTarget: parseInt(safetyTarget, 10),
-        unitCost: parseFloat(unitCost),
-        orderQty: parseInt(orderQty, 10) || 0,
-      });
 
-      setIsSubmitting(false);
-      onProductCreated(created);
-      onClose();
+      if (isEditing) {
+        const updated = await updateProduct({
+          id: productToEdit.id,
+          name: name.trim(),
+          supplierId,
+          category: chosenCategory,
+          currentStock: parseInt(currentStock, 10),
+          safetyTarget: parseInt(safetyTarget, 10),
+          unitCost: parseFloat(unitCost),
+          orderQty: parseInt(orderQty, 10) || 0,
+        });
+
+        setIsSubmitting(false);
+        onProductUpdated(updated);
+        onClose();
+      } else {
+        const created = await createProduct({
+          id: autoId,
+          sku: autoSku,
+          name: name.trim(),
+          supplierId,
+          category: chosenCategory,
+          currentStock: parseInt(currentStock, 10),
+          safetyTarget: parseInt(safetyTarget, 10),
+          unitCost: parseFloat(unitCost),
+          orderQty: parseInt(orderQty, 10) || 0,
+        });
+
+        setIsSubmitting(false);
+        onProductCreated(created);
+        onClose();
+      }
     } catch (err) {
       setIsSubmitting(false);
       setErrors({ form: err.message || 'Failed to save product to SQLite.' });
@@ -120,7 +155,7 @@ export default function AddProductModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Add New Inventory Product"
+      title={isEditing ? `Edit Product: ${productToEdit.sku}` : 'Add New Inventory Product'}
       size="lg"
       contentClassName="add-product-card"
       formProps={{
@@ -133,7 +168,7 @@ export default function AddProductModal({
             Cancel
           </Button>
           <Button variant="primary" type="submit" disabled={isSubmitting || loadingId}>
-            {isSubmitting ? 'Saving to SQLite...' : 'Save Product'}
+            {isSubmitting ? 'Saving to Database...' : (isEditing ? 'Save Changes' : 'Save Product')}
           </Button>
         </>
       }
@@ -329,4 +364,10 @@ export default function AddProductModal({
 
     </Modal>
   );
+}
+
+export default function AddProductModal(props) {
+  if (!props.isOpen) return null;
+  const formKey = props.productToEdit ? `edit-${props.productToEdit.id}` : 'new-product';
+  return <AddProductForm key={formKey} {...props} />;
 }
