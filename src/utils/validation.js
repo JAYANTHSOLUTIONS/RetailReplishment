@@ -156,25 +156,98 @@ export function validateOrderQtyInput(rawVal) {
   return { isValid: true, error: null, value: num };
 }
 
+/**
+ * Reusable helper to validate strict alphabetic name fields (blocking leading/embedded digits).
+ */
+export function validateAlphaName(rawName, {
+  fieldName = 'Name',
+  required = true,
+  min = 2,
+  max = 30,
+  emptyMsg = `Please enter valid ${fieldName.toLowerCase()}.`,
+  leadingDigitMsg = `Please enter valid ${fieldName.toLowerCase()}`,
+  containDigitMsg = `${fieldName} cannot contain numbers. Only letters, spaces, and punctuation are allowed.`,
+} = {}) {
+  const clean = String(rawName || '').trim();
+  if (!clean) {
+    return required ? emptyMsg : null;
+  }
+  if (/^\d/.test(clean)) {
+    return leadingDigitMsg;
+  }
+  if (/\d/.test(clean)) {
+    return containDigitMsg;
+  }
+  if (clean.length < min) {
+    return `${fieldName} must be at least ${min} characters.`;
+  }
+  if (clean.length > max) {
+    return `${fieldName} cannot exceed ${max} characters.`;
+  }
+  return null;
+}
+
+/**
+ * Reusable helper to validate integer range fields.
+ */
+export function validateIntegerField(rawVal, {
+  fieldName = 'Value',
+  required = true,
+  min = 0,
+  max = 999999,
+  emptyMsg = `${fieldName} is required.`,
+  formatMsg = `${fieldName} must be a non-negative whole integer.`,
+} = {}) {
+  const str = String(rawVal ?? '').trim();
+  if (str === '') {
+    return required ? emptyMsg : null;
+  }
+  if (!/^\d+$/.test(str)) {
+    return formatMsg;
+  }
+  const num = Number(str);
+  if (num < min || num > max) {
+    return `${fieldName} must be between ${min} and ${max.toLocaleString()}.`;
+  }
+  return null;
+}
+
+/**
+ * Reusable helper to validate email format with minimum 4 leading letters.
+ */
+export function validateEmailField(rawEmail, { required = false } = {}) {
+  const clean = String(rawEmail || '').trim();
+  if (!clean) {
+    return required ? 'Email is required.' : null;
+  }
+  if (/^\d/.test(clean)) {
+    return 'Please enter valid email';
+  }
+  if (!/^[a-zA-Z]{4,}/.test(clean)) {
+    return 'Email must start with at least 4 letters before any numbers or symbols (e.g. supp12@domain.com).';
+  }
+  if (!EMAIL_REGEX.test(clean)) {
+    return 'Please enter a valid email address (e.g. orders@supplier.com).';
+  }
+  return null;
+}
+
 export function validateProductForm(
   { name, sku, category, currentStock, safetyTarget, unitCost, orderQty },
   existingProducts = []
 ) {
   const errors = {};
 
-  // Name
-  const cleanName = String(name || '').trim();
-  if (!cleanName) {
-    errors.name = 'Please enter valid product name.';
-  } else if (/^\d/.test(cleanName)) {
-    errors.name = 'Please enter valid product name';
-  } else if (/\d/.test(cleanName)) {
-    errors.name = 'Please enter valid product name';
-  } else if (cleanName.length < FIELD_LIMITS.PRODUCT.NAME_MIN) {
-    errors.name = `Product name must be at least ${FIELD_LIMITS.PRODUCT.NAME_MIN} characters.`;
-  } else if (cleanName.length > FIELD_LIMITS.PRODUCT.NAME_MAX) {
-    errors.name = `Product name cannot exceed ${FIELD_LIMITS.PRODUCT.NAME_MAX} characters.`;
-  }
+  // Reusable Name Validation
+  const nameErr = validateAlphaName(name, {
+    fieldName: 'Product name',
+    min: FIELD_LIMITS.PRODUCT.NAME_MIN,
+    max: FIELD_LIMITS.PRODUCT.NAME_MAX,
+    emptyMsg: 'Please enter valid product name.',
+    leadingDigitMsg: 'Please enter valid product name',
+    containDigitMsg: 'Please enter valid product name',
+  });
+  if (nameErr) errors.name = nameErr;
 
   // SKU validation (if provided)
   if (sku !== undefined) {
@@ -196,31 +269,24 @@ export function validateProductForm(
     errors.category = `Category cannot exceed ${FIELD_LIMITS.PRODUCT.CATEGORY_MAX} characters.`;
   }
 
-  // Current Stock
-  const stockStr = String(currentStock ?? '').trim();
-  if (stockStr === '') {
-    errors.currentStock = 'Current stock is required.';
-  } else if (!/^\d+$/.test(stockStr)) {
-    errors.currentStock = 'Current stock must be a non-negative whole integer.';
-  } else {
-    const stockNum = Number(stockStr);
-    if (stockNum < FIELD_LIMITS.PRODUCT.STOCK_MIN || stockNum > FIELD_LIMITS.PRODUCT.STOCK_MAX) {
-      errors.currentStock = `Stock must be between ${FIELD_LIMITS.PRODUCT.STOCK_MIN} and ${FIELD_LIMITS.PRODUCT.STOCK_MAX.toLocaleString()}.`;
-    }
-  }
+  // Reusable Integer Validations
+  const stockErr = validateIntegerField(currentStock, {
+    fieldName: 'Stock',
+    min: FIELD_LIMITS.PRODUCT.STOCK_MIN,
+    max: FIELD_LIMITS.PRODUCT.STOCK_MAX,
+    emptyMsg: 'Current stock is required.',
+    formatMsg: 'Current stock must be a non-negative whole integer.',
+  });
+  if (stockErr) errors.currentStock = stockErr;
 
-  // Safety Target
-  const targetStr = String(safetyTarget ?? '').trim();
-  if (targetStr === '') {
-    errors.safetyTarget = 'Safety target is required.';
-  } else if (!/^\d+$/.test(targetStr)) {
-    errors.safetyTarget = 'Safety target must be a non-negative whole integer.';
-  } else {
-    const targetNum = Number(targetStr);
-    if (targetNum < FIELD_LIMITS.PRODUCT.TARGET_MIN || targetNum > FIELD_LIMITS.PRODUCT.TARGET_MAX) {
-      errors.safetyTarget = `Safety target must be between ${FIELD_LIMITS.PRODUCT.TARGET_MIN} and ${FIELD_LIMITS.PRODUCT.TARGET_MAX.toLocaleString()}.`;
-    }
-  }
+  const targetErr = validateIntegerField(safetyTarget, {
+    fieldName: 'Safety target',
+    min: FIELD_LIMITS.PRODUCT.TARGET_MIN,
+    max: FIELD_LIMITS.PRODUCT.TARGET_MAX,
+    emptyMsg: 'Safety target is required.',
+    formatMsg: 'Safety target must be a non-negative whole integer.',
+  });
+  if (targetErr) errors.safetyTarget = targetErr;
 
   // Unit Cost / Price
   const priceStr = String(unitCost ?? '').trim();
@@ -266,19 +332,16 @@ export function validateSupplierForm(
 ) {
   const errors = {};
 
-  // Name
-  const cleanName = String(name || '').trim();
-  if (!cleanName) {
-    errors.name = 'Supplier name is required.';
-  } else if (/^\d/.test(cleanName)) {
-    errors.name = 'Please enter valid name ';
-  } else if (/\d/.test(cleanName)) {
-    errors.name = 'Supplier name cannot contain numbers. Only letters, spaces, and punctuation are allowed.';
-  } else if (cleanName.length < FIELD_LIMITS.SUPPLIER.NAME_MIN) {
-    errors.name = `Supplier name must be at least ${FIELD_LIMITS.SUPPLIER.NAME_MIN} characters.`;
-  } else if (cleanName.length > FIELD_LIMITS.SUPPLIER.NAME_MAX) {
-    errors.name = `Supplier name cannot exceed ${FIELD_LIMITS.SUPPLIER.NAME_MAX} characters.`;
-  }
+  // Reusable Name Validation
+  const nameErr = validateAlphaName(name, {
+    fieldName: 'Supplier name',
+    min: FIELD_LIMITS.SUPPLIER.NAME_MIN,
+    max: FIELD_LIMITS.SUPPLIER.NAME_MAX,
+    emptyMsg: 'Supplier name is required.',
+    leadingDigitMsg: 'Please enter valid name ',
+    containDigitMsg: 'Supplier name cannot contain numbers. Only letters, spaces, and punctuation are allowed.',
+  });
+  if (nameErr) errors.name = nameErr;
 
   // Supplier Identifier (if provided)
   if (supplierId !== undefined) {
@@ -313,44 +376,30 @@ export function validateSupplierForm(
     }
   }
 
-  // Unit / Freight Threshold
-  const unitsStr = String(unitThreshold ?? '').trim();
-  if (unitsStr !== '') {
-    if (!/^\d+$/.test(unitsStr)) {
-      errors.unitThreshold = 'Unit threshold must be a non-negative whole integer.';
-    } else {
-      const unitsNum = Number(unitsStr);
-      if (unitsNum < FIELD_LIMITS.SUPPLIER.UNITS_MIN || unitsNum > FIELD_LIMITS.SUPPLIER.UNITS_MAX) {
-        errors.unitThreshold = `Unit threshold must be between ${FIELD_LIMITS.SUPPLIER.UNITS_MIN} and ${FIELD_LIMITS.SUPPLIER.UNITS_MAX.toLocaleString()}.`;
-      }
-    }
-  }
+  // Reusable Integer Validation for Unit Threshold
+  const unitsErr = validateIntegerField(unitThreshold, {
+    fieldName: 'Unit threshold',
+    required: false,
+    min: FIELD_LIMITS.SUPPLIER.UNITS_MIN,
+    max: FIELD_LIMITS.SUPPLIER.UNITS_MAX,
+    formatMsg: 'Unit threshold must be a non-negative whole integer.',
+  });
+  if (unitsErr) errors.unitThreshold = unitsErr;
 
-  // Contact Email (optional, strict email validation: no leading numbers, minimum 4 alpha letters before numbers)
-  const cleanEmail = String(contactEmail || '').trim();
-  if (cleanEmail) {
-    if (/^\d/.test(cleanEmail)) {
-      errors.contactEmail = 'Please enter valid email';
-    } else if (!/^[a-zA-Z]{4,}/.test(cleanEmail)) {
-      errors.contactEmail = 'Email must start with at least 4 letters before any numbers or symbols (e.g. supp12@domain.com).';
-    } else if (!EMAIL_REGEX.test(cleanEmail)) {
-      errors.contactEmail = 'Please enter a valid email address (e.g. orders@supplier.com).';
-    }
-  }
+  // Reusable Contact Email
+  const emailErr = validateEmailField(contactEmail, { required: false });
+  if (emailErr) errors.contactEmail = emailErr;
 
-  // Contact Rep (optional, strict name validation: no numbers, cannot start with a number)
-  const cleanRep = String(contactRep || '').trim();
-  if (cleanRep) {
-    if (/^\d/.test(cleanRep)) {
-      errors.contactRep = 'Please enter valid name';
-    } else if (/\d/.test(cleanRep)) {
-      errors.contactRep = 'Representative name cannot contain numbers. Only letters, spaces, and punctuation are allowed.';
-    } else if (cleanRep.length < 2) {
-      errors.contactRep = 'Representative name must be at least 2 characters.';
-    } else if (cleanRep.length > FIELD_LIMITS.SUPPLIER.NAME_MAX) {
-      errors.contactRep = `Representative name cannot exceed ${FIELD_LIMITS.SUPPLIER.NAME_MAX} characters.`;
-    }
-  }
+  // Reusable Contact Rep
+  const repErr = validateAlphaName(contactRep, {
+    fieldName: 'Representative name',
+    required: false,
+    min: 2,
+    max: FIELD_LIMITS.SUPPLIER.NAME_MAX,
+    leadingDigitMsg: 'Please enter valid name',
+    containDigitMsg: 'Representative name cannot contain numbers. Only letters, spaces, and punctuation are allowed.',
+  });
+  if (repErr) errors.contactRep = repErr;
 
   // Contact Phone (optional, validate format if supplied)
   const cleanPhone = String(contactPhone || '').trim();

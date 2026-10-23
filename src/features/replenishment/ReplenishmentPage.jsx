@@ -10,7 +10,6 @@ import {
   batchUpdateOrderQuantities,
   fetchReorderAcknowledgements,
   saveReorderAcknowledgement,
-  fetchAppSetting,
   saveAppSetting,
   toggleItemSelection,
   clearAllSelection,
@@ -28,253 +27,9 @@ import { matchesFilters } from '../../utils/filterRules.js';
 import AddProductModal from './AddProductModal.jsx';
 import AddSupplierModal from './AddSupplierModal.jsx';
 import mainLogo from '../../assets/logos/main-logo.png';
-import draftLogo from '../../assets/logos/draft-logo.png';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
 import { validateOrderQtyInput, sanitizeIntegerInput } from '../../utils/validation.js';
-import { ThemeSwitcher } from '../../components/ui';
-
-// ── Initial Seed / Fallback Data ──────────────────────────────────────────────
-const INITIAL_SUPPLIERS = [
-  {
-    id: 'hf',
-    name: 'Heritage Foods',
-    category: 'Dairy & Bakery',
-    initials: 'H',
-    badge: 'Preferred',
-    badgeType: 'preferred',
-    targetMoq: 10000,
-    unitThreshold: 50,
-    leadTime: '2d',
-    color: '#059669',
-  },
-  {
-    id: 'bi',
-    name: 'Britannia Industries',
-    category: 'Snacks & Biscuits',
-    initials: 'BI',
-    badge: null,
-    badgeType: null,
-    targetMoq: 8000,
-    unitThreshold: 40,
-    leadTime: '4d',
-    color: '#dc2626',
-  },
-  {
-    id: 'nf',
-    name: "Nature's Farm",
-    category: 'Fruits & Vegetables',
-    initials: 'NF',
-    badge: 'Healthy',
-    badgeType: 'healthy',
-    targetMoq: 5000,
-    unitThreshold: 30,
-    leadTime: '1d',
-    color: '#16a34a',
-    allHealthy: true,
-  },
-];
-
-const INITIAL_PRODUCTS = [
-  // Heritage Foods
-  {
-    id: 'hf-001',
-    sku: 'HF-001',
-    name: 'Fresh Milk 1L',
-    category: 'Dairy',
-    supplierId: 'hf',
-    currentStock: 12,
-    safetyTarget: 50,
-    status: 'critical',
-    priority: 'critical',
-    orderQty: 0,
-    unitCost: 90,
-    selected: false,
-  },
-  {
-    id: 'hf-002',
-    sku: 'HF-002',
-    name: 'Whole Wheat Bread',
-    category: 'Bakery',
-    supplierId: 'hf',
-    currentStock: 25,
-    safetyTarget: 60,
-    status: 'critical',
-    priority: 'critical',
-    orderQty: 0,
-    unitCost: 90,
-    selected: false,
-  },
-  {
-    id: 'hf-003',
-    sku: 'HF-003',
-    name: 'Paneer 200g',
-    category: 'Dairy',
-    supplierId: 'hf',
-    currentStock: 18,
-    safetyTarget: 40,
-    status: 'critical',
-    priority: 'critical',
-    orderQty: 0,
-    unitCost: 108.75,
-    selected: false,
-  },
-  {
-    id: 'hf-020',
-    sku: 'HF-020',
-    name: 'Cheese Block 1kg',
-    category: 'Dairy',
-    supplierId: 'hf',
-    currentStock: 8,
-    safetyTarget: 20,
-    status: 'critical',
-    priority: 'critical',
-    orderQty: 0,
-    unitCost: 450,
-    selected: false,
-  },
-  {
-    id: 'hf-004',
-    sku: 'HF-004',
-    name: 'Curd 500g',
-    category: 'Dairy',
-    supplierId: 'hf',
-    currentStock: 22,
-    safetyTarget: 40,
-    status: 'low',
-    priority: 'low',
-    orderQty: 0,
-    unitCost: 40,
-    selected: false,
-  },
-  {
-    id: 'hf-005',
-    sku: 'HF-005',
-    name: 'Butter 500g',
-    category: 'Dairy',
-    supplierId: 'hf',
-    currentStock: 15,
-    safetyTarget: 30,
-    status: 'low',
-    priority: 'low',
-    orderQty: 0,
-    unitCost: 260,
-    selected: false,
-  },
-  {
-    id: 'hf-006',
-    sku: 'HF-006',
-    name: 'Eggs (10 pcs)',
-    category: 'Dairy',
-    supplierId: 'hf',
-    currentStock: 35,
-    safetyTarget: 60,
-    status: 'low',
-    priority: 'low',
-    orderQty: 0,
-    unitCost: 80,
-    selected: false,
-  },
-  {
-    id: 'hf-007',
-    sku: 'HF-007',
-    name: 'Tomato Ketchup 500g',
-    category: 'Snacks',
-    supplierId: 'hf',
-    currentStock: 45,
-    safetyTarget: 50,
-    status: 'healthy',
-    priority: 'healthy',
-    orderQty: 0,
-    unitCost: 110,
-    selected: false,
-  },
-  {
-    id: 'hf-008',
-    sku: 'HF-008',
-    name: 'Corn Flakes 500g',
-    category: 'Breakfast',
-    supplierId: 'hf',
-    currentStock: 28,
-    safetyTarget: 40,
-    status: 'healthy',
-    priority: 'healthy',
-    orderQty: 0,
-    unitCost: 180,
-    selected: false,
-  },
-  {
-    id: 'hf-009',
-    sku: 'HF-009',
-    name: 'Olive Oil 1L',
-    category: 'Grocery',
-    supplierId: 'hf',
-    currentStock: 12,
-    safetyTarget: 30,
-    status: 'healthy',
-    priority: 'healthy',
-    orderQty: 0,
-    unitCost: 750,
-    selected: false,
-  },
-  // Britannia Items
-  {
-    id: 'bi-001',
-    sku: 'BI-001',
-    name: 'Good Day Butter 100g',
-    category: 'Biscuits',
-    supplierId: 'bi',
-    currentStock: 14,
-    safetyTarget: 60,
-    status: 'critical',
-    priority: 'critical',
-    orderQty: 0,
-    unitCost: 30,
-    selected: false,
-  },
-  {
-    id: 'bi-002',
-    sku: 'BI-002',
-    name: 'Bourbon Chocolate 150g',
-    category: 'Biscuits',
-    supplierId: 'bi',
-    currentStock: 10,
-    safetyTarget: 50,
-    status: 'critical',
-    priority: 'critical',
-    orderQty: 0,
-    unitCost: 35,
-    selected: false,
-  },
-  {
-    id: 'bi-003',
-    sku: 'BI-003',
-    name: 'NutriChoice Digestive 200g',
-    category: 'Biscuits',
-    supplierId: 'bi',
-    currentStock: 12,
-    safetyTarget: 40,
-    status: 'critical',
-    priority: 'critical',
-    orderQty: 0,
-    unitCost: 50,
-    selected: false,
-  },
-  // Nature's Farm Items
-  {
-    id: 'nf-001',
-    sku: 'NF-001',
-    name: 'Organic Cavendish Bananas',
-    category: 'Fruits',
-    supplierId: 'nf',
-    currentStock: 45,
-    safetyTarget: 40,
-    status: 'healthy',
-    priority: 'healthy',
-    orderQty: 0,
-    unitCost: 60,
-    selected: false,
-  },
-];
+import { ThemeSwitcher, StatusBadge, KeyboardShortcutsModal } from '../../components/ui';
 
 // Helper currency formatter
 const formatCurrency = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
@@ -357,10 +112,7 @@ const MemoizedProductRow = memo(function ProductRow({
       <td className="col-stk">{prod.currentStock}</td>
       <td className="col-tgt">{prod.safetyTarget}</td>
       <td className="col-st">
-        <span className={`st-badge ${badgeType}`}>
-          <span className="st-dot"></span>
-          {badgeLabel}
-        </span>
+        <StatusBadge status={badgeType} label={badgeLabel} />
       </td>
       <td className="col-qty">
         {isEditingThis ? (
@@ -595,10 +347,8 @@ export default function ReplenishmentPage({
     };
   }, [mobileMenuOpen]);
 
-  // Multi-Supplier PO Draft Queue Accordions State (Open by default)
-  const [expandedDraftSupplierIds, setExpandedDraftSupplierIds] = useState(
-    () => new Set(INITIAL_SUPPLIERS.map((s) => s.id))
-  );
+  // Multi-Supplier PO Draft Queue Accordions State
+  const [expandedDraftSupplierIds, setExpandedDraftSupplierIds] = useState(() => new Set());
 
   const toggleDraftAccordion = (supplierId) => {
     setExpandedDraftSupplierIds((prev) => {
@@ -616,8 +366,8 @@ export default function ReplenishmentPage({
   const [categories, setCategories] = useState([]);
 
   // SQLite Backed State
-  const [suppliers, setSuppliers] = useState(INITIAL_SUPPLIERS);
-  const [products, setProducts] = useState(INITIAL_PRODUCTS);
+  const [suppliers, setSuppliers] = useState([]);
+  const [products, setProducts] = useState([]);
 
   // Expandable & Collapsible Side Panels State (Horizontal side positions)
   const [sqExpanded, setSqExpanded] = useState(false);
@@ -728,7 +478,9 @@ export default function ReplenishmentPage({
       try {
         const refreshed = await fetchInventory();
         if (refreshed && refreshed.length > 0) setProducts(refreshed);
-      } catch (_) {}
+      } catch {
+        // Ignore background refresh errors
+      }
     };
     window.addEventListener('focus', handleWindowFocus);
     return () => window.removeEventListener('focus', handleWindowFocus);
@@ -776,14 +528,14 @@ export default function ReplenishmentPage({
   };
 
   // Safe action check: prompt confirmation modal if inline changes are unsaved
-  const requestActionWithUnsavedCheck = (action) => {
+  const requestActionWithUnsavedCheck = useCallback((action) => {
     if (isUnsaved && editingSku) {
       setPendingAction(() => action);
       setShowUnsavedModal(true);
     } else {
       action();
     }
-  };
+  }, [isUnsaved, editingSku]);
 
   const confirmDiscardUnsaved = () => {
     const original = products.find((p) => p.sku === editingSku);
@@ -816,7 +568,7 @@ export default function ReplenishmentPage({
 
   // Active supplier object
   const currentSupplier = useMemo(() => {
-    return suppliers.find((s) => s.id === selectedSupplierId) || suppliers[0] || INITIAL_SUPPLIERS[0];
+    return suppliers.find((s) => s.id === selectedSupplierId) || suppliers[0] || null;
   }, [suppliers, selectedSupplierId]);
 
   // Active filter count
@@ -1011,7 +763,7 @@ export default function ReplenishmentPage({
     setInlineQtyError(null);
   }, []);
 
-  const handleNavigateNextRow = useCallback((pageIdx) => {
+  const handleNavigateNextRow = useCallback(() => {
     setFocusedRowIndex((prev) => {
       const total = paginatedProducts.length;
       if (total <= 0) return 0;
@@ -1019,7 +771,7 @@ export default function ReplenishmentPage({
     });
   }, [paginatedProducts.length]);
 
-  const handleNavigatePrevRow = useCallback((pageIdx) => {
+  const handleNavigatePrevRow = useCallback(() => {
     setFocusedRowIndex((prev) => {
       const total = paginatedProducts.length;
       if (total <= 0) return 0;
@@ -1094,27 +846,10 @@ export default function ReplenishmentPage({
     }
   }, [activeQueueSuppliers, selectedSupplierId]);
 
-  // Selected items calculations for active supplier draft
-  const selectedItems = useMemo(() => {
-    return products.filter((p) => p.supplierId === selectedSupplierId && p.selected && p.orderQty > 0);
-  }, [products, selectedSupplierId]);
-
-  // Authoritative supplier MOQ & threshold validation
-  const supplierValidation = useMemo(() => {
-    return validateSupplierMoq(currentSupplier, selectedItems);
-  }, [currentSupplier, selectedItems]);
-
-  const totalSelectedUnits = supplierValidation.totalUnits;
-  const totalSelectedAmount = supplierValidation.subtotal;
-
   // All selected products with quantity > 0 across all suppliers
   const allSelectedItems = useMemo(() => {
     return products.filter((p) => p.selected && p.orderQty > 0);
   }, [products]);
-
-  const overallTotalUnits = useMemo(() => {
-    return allSelectedItems.reduce((acc, p) => acc + p.orderQty, 0);
-  }, [allSelectedItems]);
 
   const overallTotalAmount = useMemo(() => {
     return allSelectedItems.reduce((acc, p) => acc + p.orderQty * p.unitCost, 0);
@@ -1684,37 +1419,6 @@ export default function ReplenishmentPage({
     });
   };
 
-  // Save all supplier drafts in queue
-  const handlePromptSaveAllDrafts = () => {
-    if (selectedSupplierGroups.length === 0) return;
-    setConfirmModalConfig({
-      title: 'Save All Purchase Order Drafts?',
-      message: `Save drafts for all ${selectedSupplierGroups.length} suppliers (${allSelectedItems.length} items totaling ${formatCurrency(overallTotalAmount)}) to SQLite?`,
-      confirmText: 'Save All Drafts',
-      confirmClass: 'btn-primary-action',
-      onConfirm: async () => {
-        try {
-          for (const group of selectedSupplierGroups) {
-            await saveDraftPO({
-              supplierId: group.supplier.id,
-              items: group.items,
-              subtotal: group.subtotal,
-              tax: 0,
-              totalAmount: group.subtotal,
-              notes: `Draft updated on ${new Date().toLocaleDateString()}`,
-            });
-          }
-          setIsUnsaved(false);
-          setConfirmModalConfig(null);
-          showToast(`Saved drafts for ${selectedSupplierGroups.length} suppliers successfully.`);
-        } catch (err) {
-          showToast('Failed to save drafts: ' + err.message, 'warn');
-        }
-      },
-      onCancel: () => setConfirmModalConfig(null),
-    });
-  };
-
   // Submit & Dispatch PO workflow with SQLite persistence, validation, and multi-supplier queue preservation
   const handlePromptSubmitPO = (targetSupId = null) => {
     if (isUnsaved) {
@@ -1779,65 +1483,6 @@ export default function ReplenishmentPage({
           );
         } catch (err) {
           showToast('Dispatch failed: ' + err.message + '. Selection and draft preserved.', 'warn');
-        } finally {
-          setIsDispatching(false);
-        }
-      },
-      onCancel: () => setConfirmModalConfig(null),
-    });
-  };
-
-  // Dispatch all eligible supplier drafts whose MOQ is met
-  const handlePromptDispatchAllEligible = () => {
-    const eligibleGroups = selectedSupplierGroups.filter((g) => g.validation.valid);
-    if (eligibleGroups.length === 0) {
-      showToast('None of the drafts in queue currently satisfy supplier minimum order requirements.', 'warn');
-      return;
-    }
-
-    setConfirmModalConfig({
-      title: `Dispatch ${eligibleGroups.length} Eligible Purchase Orders?`,
-      message: `Confirm dispatch for ${eligibleGroups.map((g) => g.supplier.name).join(', ')}? Any drafts with unmet MOQ will remain in queue.`,
-      confirmText: isDispatching ? 'Dispatching...' : 'Dispatch All Eligible',
-      confirmClass: 'btn-primary-action',
-      onConfirm: async () => {
-        setIsDispatching(true);
-        try {
-          const dispatchedIds = new Set();
-          for (const grp of eligibleGroups) {
-            await submitPurchaseOrder({
-              supplierId: grp.supplier.id,
-              items: grp.items,
-              subtotal: grp.subtotal,
-              tax: 0,
-              totalAmount: grp.subtotal,
-              notes: `Batch dispatched locally from Replenishment Desk`,
-            });
-            dispatchedIds.add(grp.supplier.id);
-          }
-
-          // Untick items of dispatched suppliers
-          setProducts((prev) =>
-            prev.map((p) => {
-              if (dispatchedIds.has(p.supplierId)) {
-                return { ...p, selected: false, orderQty: 0, orderStatus: 'ordered' };
-              }
-              return p;
-            })
-          );
-
-          const remainingGroups = selectedSupplierGroups.filter((g) => !dispatchedIds.has(g.supplier.id));
-          if (remainingGroups.length === 0) {
-            setDraftExpanded(false);
-          }
-
-          const refreshedInventory = await fetchInventory();
-          setProducts(refreshedInventory);
-
-          setConfirmModalConfig(null);
-          showToast(`Dispatched ${dispatchedIds.size} purchase orders successfully!`);
-        } catch (err) {
-          showToast('Batch dispatch encountered error: ' + err.message, 'warn');
         } finally {
           setIsDispatching(false);
         }
@@ -2668,9 +2313,6 @@ export default function ReplenishmentPage({
                           <span className="sc-name">{sup.name}</span>
                           <span className="sc-cat">{sup.category}</span>
                         </div>
-                        {sup.badge && (
-                          <span className={`sc-badge ${sup.badgeType || 'preferred'}`}>{sup.badge}</span>
-                        )}
                         <div className="sc-chev">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <polyline points="9 18 15 12 9 6" />
@@ -4709,140 +4351,10 @@ export default function ReplenishmentPage({
       )}
 
       {/* ─── Keyboard Shortcuts Reference Modal ───────────────────────────────── */}
-      {shortcutsModalOpen && (
-        <div
-          className="modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="shortcuts-modal-title"
-          onClick={() => setShortcutsModalOpen(false)}
-        >
-          <div
-            className="modal-dialog modal-dialog-centered"
-            style={{ maxWidth: 540, width: '92%' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-content info-modal-card">
-              <div className="modal-header info-modal-header">
-                <h2
-                  id="shortcuts-modal-title"
-                  className="info-modal-title"
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0, fontSize: 16 }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="4" width="20" height="16" rx="2" />
-                    <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8" />
-                  </svg>
-                  <span>Keyboard Shortcuts &amp; Navigation</span>
-                </h2>
-                <button
-                  type="button"
-                  className="info-modal-close modal-close-btn"
-                  onClick={() => setShortcutsModalOpen(false)}
-                  aria-label="Close modal"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="modal-body info-modal-body" style={{ padding: '16px 20px', maxHeight: '70vh', overflowY: 'auto' }}>
-                {/* Section 1: Table & Row Navigation */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 10 }}>
-                    Table Navigation &amp; Selection
-                  </div>
-                  <div className="kbd-shortcut-list" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                      <span style={{ fontSize: 13, color: 'var(--text)' }}>Move row focus up / down</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <kbd className="kbd-key">↑</kbd>
-                        <kbd className="kbd-key">↓</kbd>
-                        <span style={{ color: 'var(--text3)', fontSize: 11, margin: '0 2px' }}>or</span>
-                        <kbd className="kbd-key">Tab</kbd>
-                        <kbd className="kbd-key">⇧ Tab</kbd>
-                      </div>
-                    </div>
-
-                    <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                      <span style={{ fontSize: 13, color: 'var(--text)' }}>Select or deselect focused row</span>
-                      <kbd className="kbd-key">Space</kbd>
-                    </div>
-
-                    <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                      <span style={{ fontSize: 13, color: 'var(--text)' }}>Inline edit quantity / Confirm &amp; save</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <kbd className="kbd-key">Enter</kbd>
-                        <span style={{ color: 'var(--text3)', fontSize: 11, margin: '0 2px' }}>or</span>
-                        <kbd className="kbd-key">F2</kbd>
-                      </div>
-                    </div>
-
-                    <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                      <span style={{ fontSize: 13, color: 'var(--text)' }}>Cancel edit / Revert quantity</span>
-                      <kbd className="kbd-key">Esc</kbd>
-                    </div>
-
-                    <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                      <span style={{ fontSize: 13, color: 'var(--text)' }}>Jump to first / last row on page</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <kbd className="kbd-key">Home</kbd>
-                        <kbd className="kbd-key">End</kbd>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 2: Global Shortcuts */}
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 10 }}>
-                    Global Commands &amp; Dialogs
-                  </div>
-                  <div className="kbd-shortcut-list" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                      <span style={{ fontSize: 13, color: 'var(--text)' }}>Focus global catalog search</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <kbd className="kbd-key">Ctrl</kbd>
-                        <span style={{ color: 'var(--text3)', fontSize: 11 }}>+</span>
-                        <kbd className="kbd-key">K</kbd>
-                      </div>
-                    </div>
-
-                    <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                      <span style={{ fontSize: 13, color: 'var(--text)' }}>Save purchase order draft</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <kbd className="kbd-key">Ctrl</kbd>
-                        <span style={{ color: 'var(--text3)', fontSize: 11 }}>+</span>
-                        <kbd className="kbd-key">S</kbd>
-                      </div>
-                    </div>
-
-                    <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                      <span style={{ fontSize: 13, color: 'var(--text)' }}>Toggle shortcuts navigation modal</span>
-                      <kbd className="kbd-key">?</kbd>
-                    </div>
-
-                    <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                      <span style={{ fontSize: 13, color: 'var(--text)' }}>Dismiss active modal / blur focus</span>
-                      <kbd className="kbd-key">Esc</kbd>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-footer info-modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 20px', borderTop: '1px solid var(--border-light)' }}>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => setShortcutsModalOpen(false)}
-                  style={{ minWidth: 90 }}
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <KeyboardShortcutsModal
+        isOpen={shortcutsModalOpen}
+        onClose={() => setShortcutsModalOpen(false)}
+      />
 
       {/* ─── Filter Modal ─────────────────────────────────────────────────── */}
       <FilterModal

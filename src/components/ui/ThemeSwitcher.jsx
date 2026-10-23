@@ -1,5 +1,4 @@
 // src/components/ui/ThemeSwitcher.jsx
-import React from 'react';
 
 /**
  * Single accessible theme toggle button that cycles between Light -> Dark -> System.

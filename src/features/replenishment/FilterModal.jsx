@@ -24,8 +24,9 @@ export default function FilterModal({
     search: activeFilters.search || '',
   }));
 
-  // Synchronize pending state when modal opens without cascading double render
-  useEffect(() => {
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
     if (isOpen) {
       setPending({
         statuses: activeFilters.statuses ? [...activeFilters.statuses] : [],
@@ -33,7 +34,12 @@ export default function FilterModal({
         categories: activeFilters.categories ? [...activeFilters.categories] : [],
         search: activeFilters.search || '',
       });
-    } else if (modalRef.current && modalRef.current.contains(document.activeElement)) {
+    }
+  }
+
+  // Blur active element inside modal on close
+  useEffect(() => {
+    if (!isOpen && modalRef.current && modalRef.current.contains(document.activeElement)) {
       document.activeElement?.blur();
     }
   }, [isOpen]);

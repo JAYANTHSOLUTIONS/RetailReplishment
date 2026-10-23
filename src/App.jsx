@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { fetchAppSetting, saveAppSetting } from './db/queries.js';
 
 // Route-level code splitting with React.lazy

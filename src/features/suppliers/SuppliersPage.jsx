@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
+import { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import '../../styles/replenishment.css';
 import { fetchSuppliers, fetchProductCounts } from '../../db/queries.js';
 import ThemeSwitcher from '../../components/ui/ThemeSwitcher.jsx';
@@ -113,7 +113,6 @@ export default function SuppliersPage({
   useEffect(() => {
     let active = true;
     (async () => {
-      setIsLoading(true);
       try {
         const [sups, counts] = await Promise.all([
           fetchSuppliers(),
@@ -461,16 +460,21 @@ export default function SuppliersPage({
                       <th scope="col">Target MOQ</th>
                       <th scope="col">Unit Threshold</th>
                       <th scope="col">Lead Time</th>
-                      <th scope="col">Status / Tier</th>
                       <th scope="col">Warehouse Address</th>
                       <th scope="col">Catalog</th>
                       <th scope="col" style={{ textAlign: 'right' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredSuppliers.length === 0 ? (
+                    {isLoading ? (
                       <tr>
-                        <td colSpan={9} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)' }}>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)' }}>
+                          Loading suppliers...
+                        </td>
+                      </tr>
+                    ) : filteredSuppliers.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)' }}>
                           No suppliers found matching current search.
                         </td>
                       </tr>
@@ -479,26 +483,6 @@ export default function SuppliersPage({
                         const isRowActive = selectedSupplierId === sup.id;
                         const logoSrc = SUPPLIER_LOGOS[sup.id];
                         const catalogCount = productCounts[sup.id] || 50;
-
-                        // Tier badge styling matching UI design
-                        let tierBadge = (
-                          <span className="pill-tier pill-tier-standard">
-                            Standard
-                          </span>
-                        );
-                        if (sup.id === 'hf' || sup.badgeType === 'preferred') {
-                          tierBadge = (
-                            <span className="pill-tier pill-tier-preferred">
-                              ★ Preferred
-                            </span>
-                          );
-                        } else if (sup.id === 'nf') {
-                          tierBadge = (
-                            <span className="pill-tier pill-tier-preferred">
-                              ★ Fresh Daily
-                            </span>
-                          );
-                        }
 
                         return (
                           <tr
@@ -585,11 +569,6 @@ export default function SuppliersPage({
                                 </svg>
                                 <span>{sup.leadTime || '2-3 Days'}</span>
                               </span>
-                            </td>
-
-                            {/* Status / Tier */}
-                            <td>
-                              {tierBadge}
                             </td>
 
                             {/* Warehouse Address */}
@@ -801,71 +780,69 @@ export default function SuppliersPage({
           {/* Mobile Card Layout (< 768px) */}
           {isMobile && (
             <div style={{ padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {filteredSuppliers.map((sup) => {
-                const logoSrc = SUPPLIER_LOGOS[sup.id];
-                const catalogCount = productCounts[sup.id] || 50;
+              {isLoading ? (
+                <div style={{ textAlign: 'center', padding: 32, color: 'var(--text3)' }}>Loading suppliers...</div>
+              ) : filteredSuppliers.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 32, color: 'var(--text3)' }}>No suppliers found matching current search.</div>
+              ) : (
+                filteredSuppliers.map((sup) => {
+                  const logoSrc = SUPPLIER_LOGOS[sup.id];
+                  const catalogCount = productCounts[sup.id] || 50;
 
-                return (
-                  <div
-                    key={sup.id}
-                    className="supplier-mobile-card"
-                    style={{
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 10,
-                      padding: 14,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 10,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        {logoSrc ? (
-                          <img
-                            src={logoSrc}
-                            alt=""
-                            style={{
-                              width: 32,
-                              height: 32,
-                              objectFit: 'contain',
-                              borderRadius: 4,
-                              background: '#fff',
-                              border: '1px solid var(--border)',
-                              padding: 2,
-                            }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 4,
-                              background: sup.color || '#2563eb',
-                              color: '#fff',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            {sup.initials}
+                  return (
+                    <div
+                      key={sup.id}
+                      className="supplier-mobile-card"
+                      style={{
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 10,
+                        padding: 14,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {logoSrc ? (
+                            <img
+                              src={logoSrc}
+                              alt=""
+                              style={{
+                                width: 32,
+                                height: 32,
+                                objectFit: 'contain',
+                                borderRadius: 4,
+                                background: '#fff',
+                                border: '1px solid var(--border)',
+                                padding: 2,
+                              }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: 4,
+                                background: sup.color || '#2563eb',
+                                color: '#fff',
+                                fontSize: 11,
+                                fontWeight: 700,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              {sup.initials}
+                            </div>
+                          )}
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{sup.name}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text3)' }}>{sup.category} • #{sup.id}</div>
                           </div>
-                        )}
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{sup.name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text3)' }}>{sup.category} • #{sup.id}</div>
                         </div>
                       </div>
-                      {sup.id === 'hf' ? (
-                        <span className="pill-tier pill-tier-preferred">★ Preferred</span>
-                      ) : sup.id === 'nf' ? (
-                        <span className="pill-tier pill-tier-preferred">★ Fresh Daily</span>
-                      ) : (
-                        <span className="pill-tier pill-tier-standard">Standard</span>
-                      )}
-                    </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, background: 'var(--bg)', padding: 10, borderRadius: 6, fontSize: 12 }}>
                       <div>
@@ -900,8 +877,9 @@ export default function SuppliersPage({
                     </div>
                   </div>
                 );
-              })}
-            </div>
+              })
+            )}
+          </div>
           )}
         </main>
       </div>

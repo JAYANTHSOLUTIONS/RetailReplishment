@@ -1,5 +1,5 @@
 import { runQuery, runExecute, runTransaction } from './database.js';
-import { SEED_SUPPLIERS, SEED_PRODUCTS, SEED_MANIFESTS, SEED_PURCHASE_ORDERS } from './seed.js';
+import { SEED_SUPPLIERS, SEED_PRODUCTS, SEED_PURCHASE_ORDERS } from './seed.js';
 
 import { calculatePriority } from '../utils/priorityRules.js';
 import {

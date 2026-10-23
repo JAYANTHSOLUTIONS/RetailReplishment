@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
  * Accessible Keyboard Shortcuts Modal (WCAG 2.2 AA compliant)

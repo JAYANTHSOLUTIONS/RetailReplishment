@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
+import { useState, useEffect, useMemo, useRef, useDeferredValue, Fragment } from 'react';
 import '../../styles/replenishment.css';
 import { fetchAllManifests, updateManifestStatus } from '../../db/queries.js';
 import ThemeSwitcher from '../../components/ui/ThemeSwitcher.jsx';
@@ -122,7 +122,23 @@ export default function ManifestsPage({
   };
 
   useEffect(() => {
-    loadManifests();
+    let active = true;
+    (async () => {
+      try {
+        const list = await fetchAllManifests();
+        if (active) setManifests(list || []);
+      } catch (err) {
+        if (active) {
+          console.error('[ManifestsPage] Error fetching manifests:', err);
+          showToast('Failed to load manifests.', 'error');
+        }
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Update status with optimistic UI update (instant feedback with rollback on error)
@@ -496,7 +512,13 @@ export default function ManifestsPage({
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredManifests.length === 0 ? (
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text3)' }}>
+                          Loading inbound manifests...
+                        </td>
+                      </tr>
+                    ) : filteredManifests.length === 0 ? (
                       <tr>
                         <td colSpan={8} style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text3)' }}>
                           <div style={{ fontSize: 32, marginBottom: 8 }}>📦</div>
@@ -553,7 +575,7 @@ export default function ManifestsPage({
                         }
 
                         return (
-                          <React.Fragment key={m.id}>
+                          <Fragment key={m.id}>
                             <tr>
                               {/* Manifest # */}
                               <td>
@@ -743,7 +765,7 @@ export default function ManifestsPage({
                                 </td>
                               </tr>
                             )}
-                          </React.Fragment>
+                          </Fragment>
                         );
                       })
                     )}
@@ -756,31 +778,40 @@ export default function ManifestsPage({
           {/* Mobile Card View (< 768px) */}
           {isMobile && (
             <div style={{ padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {filteredManifests.map((m) => {
-                const logoSrc = SUPPLIER_LOGOS[m.supplierId];
-                const isUpdating = updatingId === m.id;
+              {isLoading ? (
+                <div style={{ textAlign: 'center', padding: 32, color: 'var(--text3)' }}>Loading inbound manifests...</div>
+              ) : filteredManifests.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 32, color: 'var(--text3)' }}>No manifests found matching criteria.</div>
+              ) : (
+                filteredManifests.map((m) => {
+                  const logoSrc = SUPPLIER_LOGOS[m.supplierId];
+                  const isUpdating = updatingId === m.id;
 
-                return (
-                  <div
-                    key={m.id}
-                    style={{
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 10,
-                      padding: 14,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 10,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 20 }}>📦</span>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: 13 }}>{m.manifestNo || `MNF-${m.id.slice(-4)}`}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text3)' }}>{m.supplierName}</div>
+                  return (
+                    <div
+                      key={m.id}
+                      style={{
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 10,
+                        padding: 14,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {logoSrc ? (
+                            <img src={logoSrc} alt="" style={{ width: 24, height: 24, objectFit: 'contain' }} />
+                          ) : (
+                            <span style={{ fontSize: 20 }}>📦</span>
+                          )}
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 13 }}>{m.manifestNo || `MNF-${m.id.slice(-4)}`}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text3)' }}>{m.supplierName}</div>
+                          </div>
                         </div>
-                      </div>
                       <span className="pill-status-manifest pill-status-intransit">
                         {m.status === 'delivered' ? '✓ Delivered' : '🚚 In Transit'}
                       </span>
@@ -820,8 +851,9 @@ export default function ManifestsPage({
                     </div>
                   </div>
                 );
-              })}
-            </div>
+              })
+            )}
+          </div>
           )}
         </main>
       </div>

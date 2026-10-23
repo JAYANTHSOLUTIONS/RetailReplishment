@@ -1,6 +1,6 @@
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm';
 import { CREATE_TABLES_SQL } from './schema.js';
-import { SEED_SUPPLIERS, SEED_PRODUCTS, SEED_MANIFESTS, SEED_PURCHASE_ORDERS } from './seed.js';
+import { SEED_SUPPLIERS, SEED_PRODUCTS, SEED_PURCHASE_ORDERS } from './seed.js';
 
 let dbInstance = null;
 let sqlite3Instance = null;
@@ -195,7 +195,7 @@ export async function getDatabase() {
           try {
             const p = sqlite3.wasm.alloc(savedBytes.byteLength);
             sqlite3.wasm.heap8().set(savedBytes, p);
-            const rc = sqlite3.capi.sqlite3_deserialize(
+            sqlite3.capi.sqlite3_deserialize(
               db,
               'main',
               p,
@@ -278,7 +278,7 @@ export async function getDatabase() {
 
         try {
           db.exec(`ALTER TABLE pending_manifests ADD COLUMN po_id TEXT;`);
-        } catch (_) {
+        } catch {
           // column already exists
         }
 
