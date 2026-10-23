@@ -359,7 +359,9 @@ export default function POHistoryPage({
                         const sup = supplierMap[po.supplierId];
                         const logoSrc = SUPPLIER_LOGOS[po.supplierId];
                         const isDraft = po.status === 'draft';
-                        const isDelivered = (po.status || '').toLowerCase() === 'delivered';
+                        const isDelivered =
+                          (po.status || '').toLowerCase() === 'delivered' ||
+                          (po.manifestStatus || '').toLowerCase() === 'delivered';
                         const itemsCount = po.items?.length || 0;
                         const totalUnits = po.items?.reduce((acc, it) => acc + (it.quantity || 0), 0) || 0;
 
@@ -610,7 +612,9 @@ export default function POHistoryPage({
                   const sup = supplierMap[po.supplierId];
                   const logoSrc = SUPPLIER_LOGOS[po.supplierId];
                   const isDraft = po.status === 'draft';
-                  const isDelivered = (po.status || '').toLowerCase() === 'delivered';
+                  const isDelivered =
+                    (po.status || '').toLowerCase() === 'delivered' ||
+                    (po.manifestStatus || '').toLowerCase() === 'delivered';
                   return (
                     <div
                       key={po.id}

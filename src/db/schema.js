@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   id TEXT PRIMARY KEY,
   po_number TEXT UNIQUE NOT NULL,
   supplier_id TEXT NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
-  status TEXT NOT NULL CHECK(status IN ('draft', 'submitted', 'cancelled')),
+  status TEXT NOT NULL CHECK(status IN ('draft', 'submitted', 'cancelled', 'delivered')),
   subtotal REAL NOT NULL DEFAULT 0,
   tax REAL NOT NULL DEFAULT 0,
   total_amount REAL NOT NULL DEFAULT 0,

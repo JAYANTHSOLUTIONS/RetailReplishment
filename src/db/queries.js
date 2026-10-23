@@ -257,10 +257,14 @@ export async function updateManifestStatus(manifestId, newStatus) {
         });
       }
       if (mnf[0]?.po_id) {
-        db.exec({
-          sql: `UPDATE purchase_orders SET status = 'delivered', updated_at = datetime('now') WHERE id = ?;`,
-          bind: [mnf[0].po_id],
-        });
+        try {
+          db.exec({
+            sql: `UPDATE purchase_orders SET status = 'delivered', updated_at = datetime('now') WHERE id = ?;`,
+            bind: [mnf[0].po_id],
+          });
+        } catch (poErr) {
+          console.warn('[updateManifestStatus] purchase_orders status update note:', poErr);
+        }
       }
     } else if (newStatus === 'in_transit') {
       // Revert delivered status: subtract stock and restore ordered status
@@ -275,10 +279,14 @@ export async function updateManifestStatus(manifestId, newStatus) {
         });
       }
       if (mnf[0]?.po_id) {
-        db.exec({
-          sql: `UPDATE purchase_orders SET status = 'submitted', updated_at = datetime('now') WHERE id = ?;`,
-          bind: [mnf[0].po_id],
-        });
+        try {
+          db.exec({
+            sql: `UPDATE purchase_orders SET status = 'submitted', updated_at = datetime('now') WHERE id = ?;`,
+            bind: [mnf[0].po_id],
+          });
+        } catch (poErr) {
+          console.warn('[updateManifestStatus] purchase_orders status update note:', poErr);
+        }
       }
     }
 
@@ -290,12 +298,16 @@ export async function updateManifestStatus(manifestId, newStatus) {
 export async function fetchPOHistory(supplierId = null) {
   const isFiltered = supplierId && supplierId !== 'all';
   const orders = await runQuery(`
-    SELECT id, po_number as poNumber, supplier_id as supplierId,
-           status, subtotal, tax, total_amount as totalAmount,
-           notes, created_at as createdAt, updated_at as updatedAt
-    FROM purchase_orders
-    ${isFiltered ? 'WHERE supplier_id = ?' : ''}
-    ORDER BY created_at DESC;
+    SELECT po.id, po.po_number as poNumber, po.supplier_id as supplierId,
+           po.status, po.subtotal, po.tax, po.total_amount as totalAmount,
+           po.notes, po.created_at as createdAt, po.updated_at as updatedAt,
+           pm.status as manifestStatus
+    FROM purchase_orders po
+    LEFT JOIN (
+      SELECT po_id, status FROM pending_manifests WHERE po_id IS NOT NULL
+    ) pm ON pm.po_id = po.id
+    ${isFiltered ? 'WHERE po.supplier_id = ?' : ''}
+    ORDER BY po.created_at DESC;
   `, isFiltered ? [supplierId] : []);
 
   if (orders.length === 0) return [];

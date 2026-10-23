@@ -262,6 +262,32 @@ export async function getDatabase() {
           schedulePersistence();
         }
 
+        // Safe migration check for purchase_orders check constraint to support delivered status
+        const poCheck = db.selectValue("SELECT sql FROM sqlite_master WHERE type='table' AND name='purchase_orders';");
+        if (poCheck && !poCheck.includes('delivered')) {
+          db.exec(`
+            PRAGMA foreign_keys = OFF;
+            CREATE TABLE IF NOT EXISTS purchase_orders_v2 (
+              id TEXT PRIMARY KEY,
+              po_number TEXT UNIQUE NOT NULL,
+              supplier_id TEXT NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+              status TEXT NOT NULL CHECK(status IN ('draft', 'submitted', 'cancelled', 'delivered')),
+              subtotal REAL NOT NULL DEFAULT 0,
+              tax REAL NOT NULL DEFAULT 0,
+              total_amount REAL NOT NULL DEFAULT 0,
+              notes TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            INSERT OR IGNORE INTO purchase_orders_v2 SELECT * FROM purchase_orders;
+            DROP TABLE purchase_orders;
+            ALTER TABLE purchase_orders_v2 RENAME TO purchase_orders;
+            PRAGMA foreign_keys = ON;
+          `);
+          console.info('[SQLite] Migrated purchase_orders table to support delivered status.');
+          schedulePersistence();
+        }
+
         // Migration: create manifest_items table if missing and add po_id to pending_manifests
         db.exec(`
           CREATE TABLE IF NOT EXISTS manifest_items (
