@@ -199,9 +199,22 @@ export async function fetchAllManifests() {
       `, [row.supplierId, Math.max(3, row.itemsCount)]);
     }
 
+    const items = (products || []).map((p) => ({
+      id: p.id,
+      sku: p.sku,
+      name: p.name,
+      category: p.category || '',
+      quantity: p.quantity,
+      unitPrice: p.unitCost,
+      unitCost: p.unitCost,
+    }));
+
     enriched.push({
       ...row,
-      products: products || [],
+      manifestNo: row.manifestNumber,
+      eta: row.expectedDate,
+      items,
+      products: items,
     });
   }
   return enriched;
@@ -738,6 +751,7 @@ export async function createSupplier(supplierData) {
     contactRep = '',
     contactEmail = '',
     contactPhone = '',
+    contactAddress = '',
     leadTime = '3d',
     targetMoq = 5000,
     unitThreshold = 0,
@@ -760,7 +774,7 @@ export async function createSupplier(supplierData) {
     INSERT INTO suppliers (
       id, name, category, initials, badge, badge_type, target_moq, unit_threshold,
       lead_time, color, all_healthy, contact_rep, contact_email, contact_phone, contact_address
-    ) VALUES (?, ?, ?, ?, 'Standard', 'standard', ?, ?, ?, '#2563eb', 0, ?, ?, ?, '');
+    ) VALUES (?, ?, ?, ?, 'Standard', 'standard', ?, ?, ?, '#2563eb', 0, ?, ?, ?, ?);
   `, [
     id,
     cleanName,
@@ -772,6 +786,7 @@ export async function createSupplier(supplierData) {
     contactRep.trim(),
     contactEmail.trim(),
     contactPhone.trim(),
+    contactAddress.trim(),
   ]);
 
   return {
@@ -789,7 +804,68 @@ export async function createSupplier(supplierData) {
     contactRep: contactRep.trim(),
     contactEmail: contactEmail.trim(),
     contactPhone: contactPhone.trim(),
-    contactAddress: '',
+    contactAddress: contactAddress.trim(),
+  };
+}
+
+// ── Update Supplier (Inline Edit) ───────────────────────────────────────────
+export async function updateSupplier(supplierData) {
+  const {
+    id,
+    name,
+    category,
+    contactRep = '',
+    contactEmail = '',
+    contactPhone = '',
+    contactAddress = '',
+    targetMoq = 5000,
+    unitThreshold = 0,
+    leadTime = '3d',
+  } = supplierData;
+
+  if (!id) throw new Error('Supplier ID is required.');
+  const cleanName = (name || '').trim();
+  if (!cleanName) throw new Error('Supplier name cannot be empty.');
+
+  const parsedMoq = parseFloat(targetMoq) || 0;
+  const parsedUnits = parseInt(unitThreshold, 10) || 0;
+
+  await runExecute(`
+    UPDATE suppliers
+    SET name = ?,
+        category = ?,
+        contact_rep = ?,
+        contact_email = ?,
+        contact_phone = ?,
+        contact_address = ?,
+        target_moq = ?,
+        unit_threshold = ?,
+        lead_time = ?
+    WHERE id = ?;
+  `, [
+    cleanName,
+    (category || '').trim(),
+    (contactRep || '').trim(),
+    (contactEmail || '').trim(),
+    (contactPhone || '').trim(),
+    (contactAddress || '').trim(),
+    parsedMoq,
+    parsedUnits,
+    (leadTime || '').trim() || '3d',
+    id,
+  ]);
+
+  return {
+    id,
+    name: cleanName,
+    category: (category || '').trim(),
+    contactRep: (contactRep || '').trim(),
+    contactEmail: (contactEmail || '').trim(),
+    contactPhone: (contactPhone || '').trim(),
+    contactAddress: (contactAddress || '').trim(),
+    targetMoq: parsedMoq,
+    unitThreshold: parsedUnits,
+    leadTime: (leadTime || '').trim() || '3d',
   };
 }
 

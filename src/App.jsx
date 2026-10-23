@@ -2,6 +2,8 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { fetchAppSetting, saveAppSetting } from './db/queries.js';
 
 // Route-level code splitting with React.lazy
+const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage.jsx'));
+const LoginPage = lazy(() => import('./features/auth/LoginPage.jsx'));
 const ReplenishmentPage = lazy(() => import('./features/replenishment/ReplenishmentPage.jsx'));
 const ManifestsPage = lazy(() => import('./features/manifests/ManifestsPage.jsx'));
 const SuppliersPage = lazy(() => import('./features/suppliers/SuppliersPage.jsx'));
@@ -50,19 +52,32 @@ export default function App() {
   const [draftToRestore, setDraftToRestore] = useState(null);
   const [targetSupplierForHistory, setTargetSupplierForHistory] = useState(null);
 
+  // Authenticated user state
+  const [authUser, setAuthUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stockdesk_auth_user');
+      return saved ? JSON.parse(saved) : {
+        name: 'Store Inventory Admin',
+        email: 'admin@stockdesk.com',
+        role: 'Operations & Replenishment Director',
+        avatar: 'AD',
+      };
+    } catch {
+      return null;
+    }
+  });
+
   const [currentPage, setCurrentPage] = useState(() => {
-    if (typeof window === 'undefined') return 'replenishment';
+    if (typeof window === 'undefined') return 'dashboard';
     const params = new URLSearchParams(window.location.search);
-    if (params.get('page') === 'manifests' || window.location.pathname.startsWith('/manifests')) {
-      return 'manifests';
-    }
-    if (params.get('page') === 'suppliers' || window.location.pathname.startsWith('/suppliers')) {
-      return 'suppliers';
-    }
-    if (params.get('page') === 'history' || window.location.pathname.startsWith('/history')) {
-      return 'history';
-    }
-    return 'replenishment';
+    const p = params.get('page');
+    if (p === 'login' || window.location.pathname.startsWith('/login')) return 'login';
+    if (p === 'dashboard' || window.location.pathname.startsWith('/dashboard')) return 'dashboard';
+    if (p === 'manifests' || window.location.pathname.startsWith('/manifests')) return 'manifests';
+    if (p === 'suppliers' || window.location.pathname.startsWith('/suppliers')) return 'suppliers';
+    if (p === 'history' || window.location.pathname.startsWith('/history')) return 'history';
+    if (p === 'replenishment' || window.location.pathname.startsWith('/replenishment')) return 'replenishment';
+    return 'dashboard';
   });
 
   const [themePreference, setThemePreference] = useState(() => {
@@ -130,14 +145,21 @@ export default function App() {
   useEffect(() => {
     const handlePopState = () => {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('page') === 'manifests' || window.location.pathname.startsWith('/manifests')) {
+      const p = params.get('page');
+      if (p === 'login' || window.location.pathname.startsWith('/login')) {
+        setCurrentPage('login');
+      } else if (p === 'dashboard' || window.location.pathname.startsWith('/dashboard')) {
+        setCurrentPage('dashboard');
+      } else if (p === 'manifests' || window.location.pathname.startsWith('/manifests')) {
         setCurrentPage('manifests');
-      } else if (params.get('page') === 'suppliers' || window.location.pathname.startsWith('/suppliers')) {
+      } else if (p === 'suppliers' || window.location.pathname.startsWith('/suppliers')) {
         setCurrentPage('suppliers');
-      } else if (params.get('page') === 'history' || window.location.pathname.startsWith('/history')) {
+      } else if (p === 'history' || window.location.pathname.startsWith('/history')) {
         setCurrentPage('history');
-      } else {
+      } else if (p === 'replenishment' || window.location.pathname.startsWith('/replenishment')) {
         setCurrentPage('replenishment');
+      } else {
+        setCurrentPage('dashboard');
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -156,14 +178,44 @@ export default function App() {
       setDraftToRestore(options.restoreDraft);
     }
     let targetUrl = '/';
-    if (page === 'manifests') targetUrl = '/manifests';
+    if (page === 'dashboard') targetUrl = '/dashboard';
+    else if (page === 'login') targetUrl = '/login';
+    else if (page === 'manifests') targetUrl = '/manifests';
     else if (page === 'suppliers') targetUrl = '/suppliers';
     else if (page === 'history') targetUrl = '/history';
+    else if (page === 'replenishment') targetUrl = '/';
     window.history.pushState({ page, ...options }, '', targetUrl);
+  };
+
+  const handleLoginSuccess = (user) => {
+    setAuthUser(user);
+    navigateTo('dashboard');
+  };
+
+  const handleLogout = () => {
+    setAuthUser(null);
+    localStorage.removeItem('stockdesk_auth_user');
+    navigateTo('login');
   };
 
   return (
     <Suspense fallback={<PageFallback />}>
+      {currentPage === 'login' && (
+        <LoginPage
+          onLoginSuccess={handleLoginSuccess}
+          themePreference={themePreference}
+          onThemeChange={handleThemeChange}
+        />
+      )}
+      {currentPage === 'dashboard' && (
+        <DashboardPage
+          user={authUser}
+          onLogout={handleLogout}
+          onNavigateTo={(page, opts) => navigateTo(page, opts)}
+          themePreference={themePreference}
+          onThemeChange={handleThemeChange}
+        />
+      )}
       {currentPage === 'manifests' && (
         <ManifestsPage
           themePreference={themePreference}
@@ -194,6 +246,7 @@ export default function App() {
         <ReplenishmentPage
           themePreference={themePreference}
           onThemeChange={handleThemeChange}
+          onNavigateToDashboard={() => navigateTo('dashboard')}
           onNavigateToManifests={() => navigateTo('manifests')}
           onNavigateToSuppliers={() => navigateTo('suppliers')}
           onNavigateToHistory={(opts) => navigateTo('history', opts)}

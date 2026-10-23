@@ -1,9 +1,24 @@
 import { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import '../../styles/replenishment.css';
-import { fetchSuppliers, fetchProductCounts } from '../../db/queries.js';
+import { fetchSuppliers, fetchProductCounts, updateSupplier } from '../../db/queries.js';
 import ReplenishmentTopbar from '../replenishment/components/ReplenishmentTopbar.jsx';
 import KeyboardShortcutsModal from '../../components/ui/KeyboardShortcutsModal.jsx';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
+
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import Inventory2Icon from '@mui/icons-material/Inventory2';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import SettingsIcon from '@mui/icons-material/Settings';
+import SearchIcon from '@mui/icons-material/Search';
+import EditIcon from '@mui/icons-material/Edit';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
 
 const formatCurrency = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
 
@@ -22,8 +37,12 @@ export default function SuppliersPage({
   const [selectedSupplierId, setSelectedSupplierId] = useState('hf');
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [toast, setToast] = useState(null);
+
+  // Inline editing state
+  const [editingSupplierId, setEditingSupplierId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
 
   const searchInputRef = useRef(null);
 
@@ -96,10 +115,6 @@ export default function SuppliersPage({
           setShortcutsModalOpen(false);
           return;
         }
-        if (quickActionsOpen) {
-          setQuickActionsOpen(false);
-          return;
-        }
         if (document.activeElement === searchInputRef.current) {
           searchInputRef.current?.blur();
         }
@@ -108,7 +123,7 @@ export default function SuppliersPage({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcutsModalOpen, quickActionsOpen]);
+  }, [shortcutsModalOpen]);
 
   // Load authoritative suppliers and product counts from SQLite
   useEffect(() => {
@@ -170,12 +185,46 @@ export default function SuppliersPage({
     });
   }, [suppliers, categoryFilter, deferredSearchTerm]);
 
-  // Action: Replenish -> navigate to replenishment desk with supplier filter
-  const handleReplenishSupplier = (supplierId) => {
-    if (onNavigateTo) {
-      onNavigateTo('replenishment', { supplier: supplierId });
-    } else if (onNavigateBack) {
-      onNavigateBack();
+  // Inline editing handlers
+  const startEditing = (sup) => {
+    setEditingSupplierId(sup.id);
+    setEditForm({
+      id: sup.id,
+      name: sup.name || '',
+      category: sup.category || '',
+      contactRep: sup.contactRep || '',
+      contactEmail: sup.contactEmail || '',
+      contactPhone: sup.contactPhone || '',
+      contactAddress: sup.contactAddress || 'Central Distribution Hub',
+      targetMoq: sup.targetMoq || 5000,
+      unitThreshold: sup.unitThreshold || 0,
+      leadTime: sup.leadTime || '2-3 Days',
+    });
+  };
+
+  const cancelEditing = () => {
+    setEditingSupplierId(null);
+    setEditForm({});
+  };
+
+  const handleSaveInlineEdit = async () => {
+    if (!editForm.name || !editForm.name.trim()) {
+      showToast('Supplier name cannot be empty', 'error');
+      return;
+    }
+    try {
+      setIsSaving(true);
+      const updated = await updateSupplier(editForm);
+      setSuppliers((prev) =>
+        prev.map((s) => (s.id === editForm.id ? { ...s, ...updated } : s))
+      );
+      showToast(`Supplier "${updated.name}" saved to database successfully!`, 'success');
+      setEditingSupplierId(null);
+    } catch (err) {
+      console.error('Error saving supplier:', err);
+      showToast(err.message || 'Failed to save supplier to SQLite.', 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -209,24 +258,14 @@ export default function SuppliersPage({
         {/* Left Icon Navigation Rail */}
         <nav className="icon-nav" aria-label="Main navigation rail" style={{ width: 52, flexShrink: 0, minHeight: 'calc(100vh - 56px)', position: 'sticky', top: 56, height: 'calc(100vh - 56px)', zIndex: 30 }}>
           <div className="icon-nav-list">
-            <button className="icon-nav-btn" title="Dashboard" onClick={onNavigateBack} aria-label="Dashboard">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              </svg>
+            <button className="icon-nav-btn" title="Dashboard" onClick={() => onNavigateTo && onNavigateTo('dashboard')} aria-label="Dashboard">
+              <DashboardIcon style={{ fontSize: 20 }} />
             </button>
-            <button className="icon-nav-btn" title="Inventory" onClick={onNavigateBack} aria-label="Inventory">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-              </svg>
+            <button className="icon-nav-btn" title="Inventory Products" onClick={onNavigateBack} aria-label="Inventory Products">
+              <Inventory2Icon style={{ fontSize: 20 }} />
             </button>
             <button className="icon-nav-btn" title="Replenishment Desk" onClick={onNavigateBack} aria-label="Replenishment Desk">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-                <line x1="16" y1="13" x2="8" y2="13" />
-                <line x1="16" y1="17" x2="8" y2="17" />
-              </svg>
+              <AssignmentIcon style={{ fontSize: 20 }} />
             </button>
             <button
               className="icon-nav-btn"
@@ -234,12 +273,7 @@ export default function SuppliersPage({
               onClick={() => onNavigateTo && onNavigateTo('manifests')}
               aria-label="Inbound Delivery Manifests"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <rect x="1" y="3" width="15" height="13" />
-                <polygon points="16 8 20 8 23 11 23 16 16 8" />
-                <circle cx="5.5" cy="18.5" r="2.5" />
-                <circle cx="18.5" cy="18.5" r="2.5" />
-              </svg>
+              <LocalShippingIcon style={{ fontSize: 20 }} />
             </button>
             <button
               className="icon-nav-btn active"
@@ -247,12 +281,7 @@ export default function SuppliersPage({
               aria-current="page"
               aria-label="Suppliers Directory"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
+              <StorefrontIcon style={{ fontSize: 20 }} />
             </button>
             <button
               className="icon-nav-btn"
@@ -260,51 +289,35 @@ export default function SuppliersPage({
               onClick={() => onNavigateTo && onNavigateTo('history')}
               aria-label="Purchase Order History"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M12 8v4l3 3" />
-                <circle cx="12" cy="12" r="9" />
-              </svg>
+              <ReceiptLongIcon style={{ fontSize: 20 }} />
             </button>
             <button className="icon-nav-btn" title="Analytics" aria-label="Analytics">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <line x1="18" y1="20" x2="18" y2="10" />
-                <line x1="12" y1="20" x2="12" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="14" />
-              </svg>
+              <BarChartIcon style={{ fontSize: 20 }} />
             </button>
           </div>
           <div className="icon-nav-bottom">
             <button className="icon-nav-btn" title="Settings" aria-label="Settings">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
+              <SettingsIcon style={{ fontSize: 20 }} />
             </button>
           </div>
         </nav>
 
         {/* Main Content Area */}
         <main id="main-content" className="redesign-main-content">
-          {/* Subheader with Back Button, Title, Badge, and Subtitle */}
+          {/* Subheader with Back Button, Title, and Subtitle */}
           <div className="redesign-subheader">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <button
                 type="button"
                 onClick={onNavigateBack}
-                className="redesign-back-btn"
-                title="Return to Retail Replenishment Desk"
+                className="redesign-icon-back-btn"
+                title="Back to Replenishment Desk"
+                aria-label="Back to Replenishment Desk"
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <line x1="19" y1="12" x2="5" y2="12" />
-                  <polyline points="12 19 5 12 12 5" />
-                </svg>
-                <span>Back to Replenishment Desk</span>
+                <ArrowBackIcon style={{ fontSize: 20 }} />
               </button>
 
-              <div className="redesign-title-wrapper">
-                <div className="redesign-icon-badge" aria-hidden="true">
-                  🏬
-                </div>
+              <div className="redesign-title-wrapper" style={{ marginLeft: 0 }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <h1 className="redesign-title">
@@ -327,10 +340,7 @@ export default function SuppliersPage({
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '1 1 300px' }}>
               <div className="redesign-search-box">
                 <span className="redesign-search-icon" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="m21 21-4.3-4.3" />
-                  </svg>
+                  <SearchIcon style={{ fontSize: 16 }} />
                 </span>
                 <input
                   type="text"
@@ -400,15 +410,16 @@ export default function SuppliersPage({
                     ) : (
                       filteredSuppliers.map((sup) => {
                         const isRowActive = selectedSupplierId === sup.id;
+                        const isEditing = editingSupplierId === sup.id;
                         const logoSrc = SUPPLIER_LOGOS[sup.id];
                         const catalogCount = productCounts[sup.id] || 50;
 
                         return (
                           <tr
                             key={sup.id}
-                            className={isRowActive ? 'row-active' : ''}
-                            onClick={() => setSelectedSupplierId(sup.id)}
-                            style={{ cursor: 'pointer' }}
+                            className={`${isRowActive ? 'row-active' : ''} ${isEditing ? 'row-editing' : ''}`}
+                            onClick={() => !isEditing && setSelectedSupplierId(sup.id)}
+                            style={{ cursor: isEditing ? 'default' : 'pointer' }}
                           >
                             {/* Supplier Logo & Name */}
                             <td>
@@ -447,55 +458,156 @@ export default function SuppliersPage({
                                     {sup.initials || sup.name.slice(0, 2).toUpperCase()}
                                   </div>
                                 )}
-                                <div>
-                                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
-                                    {sup.name}
-                                  </div>
-                                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                                    {sup.category} • #{sup.id}
-                                  </div>
+                                <div style={{ flex: 1 }}>
+                                  {isEditing ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                      <input
+                                        type="text"
+                                        className="inline-edit-input"
+                                        value={editForm.name}
+                                        onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                                        placeholder="Supplier Name"
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                      <input
+                                        type="text"
+                                        className="inline-edit-input sub"
+                                        value={editForm.category}
+                                        onChange={(e) => setEditForm((prev) => ({ ...prev, category: e.target.value }))}
+                                        placeholder="Category"
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
+                                        {sup.name}
+                                      </div>
+                                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                                        {sup.category} • #{sup.id}
+                                      </div>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             </td>
 
                             {/* Contact Person */}
                             <td>
-                              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>
-                                {sup.contactRep || 'Fulfillment Manager'}
-                              </div>
+                              {isEditing ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  <input
+                                    type="text"
+                                    className="inline-edit-input"
+                                    value={editForm.contactRep}
+                                    onChange={(e) => setEditForm((prev) => ({ ...prev, contactRep: e.target.value }))}
+                                    placeholder="Representative Name"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                  <input
+                                    type="email"
+                                    className="inline-edit-input sub"
+                                    value={editForm.contactEmail}
+                                    onChange={(e) => setEditForm((prev) => ({ ...prev, contactEmail: e.target.value }))}
+                                    placeholder="Email"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </div>
+                              ) : (
+                                <div>
+                                  <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>
+                                    {sup.contactRep || 'Fulfillment Manager'}
+                                  </div>
+                                  {sup.contactEmail && (
+                                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                                      {sup.contactEmail}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </td>
 
                             {/* Target MOQ */}
                             <td>
-                              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
-                                {formatCurrency(sup.targetMoq)}
-                              </div>
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  className="inline-edit-input num"
+                                  style={{ width: 90 }}
+                                  value={editForm.targetMoq}
+                                  onChange={(e) => setEditForm((prev) => ({ ...prev, targetMoq: e.target.value }))}
+                                  placeholder="5000"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
+                                  {formatCurrency(sup.targetMoq)}
+                                </div>
+                              )}
                             </td>
 
                             {/* Unit Threshold */}
                             <td>
-                              <div style={{ fontSize: 13, color: 'var(--text2)' }}>
-                                {sup.unitThreshold ? `${sup.unitThreshold} units` : 'units'}
-                              </div>
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  className="inline-edit-input num"
+                                  style={{ width: 70 }}
+                                  value={editForm.unitThreshold}
+                                  onChange={(e) => setEditForm((prev) => ({ ...prev, unitThreshold: e.target.value }))}
+                                  placeholder="0"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <div style={{ fontSize: 13, color: 'var(--text2)' }}>
+                                  {sup.unitThreshold ? `${sup.unitThreshold} units` : '0 units'}
+                                </div>
+                              )}
                             </td>
 
                             {/* Lead Time */}
                             <td>
-                              <span className="pill-lead-time">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                  <circle cx="12" cy="12" r="10" />
-                                  <polyline points="12 6 12 12 16 14" />
-                                </svg>
-                                <span>{sup.leadTime || '2-3 Days'}</span>
-                              </span>
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  className="inline-edit-input"
+                                  style={{ width: 85 }}
+                                  value={editForm.leadTime}
+                                  onChange={(e) => setEditForm((prev) => ({ ...prev, leadTime: e.target.value }))}
+                                  placeholder="e.g. 3d"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <span className="pill-lead-time">
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                  </svg>
+                                  <span>{sup.leadTime || '2-3 Days'}</span>
+                                </span>
+                              )}
                             </td>
 
                             {/* Warehouse Address */}
                             <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)' }}>
-                                <span style={{ color: '#ef4444', fontSize: 14 }} aria-hidden="true">📍</span>
-                                <span>Central Distribution Hub</span>
-                              </div>
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  className="inline-edit-input"
+                                  style={{ minWidth: 150 }}
+                                  value={editForm.contactAddress}
+                                  onChange={(e) => setEditForm((prev) => ({ ...prev, contactAddress: e.target.value }))}
+                                  placeholder="Warehouse Address"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)' }}>
+                                  <LocationOnIcon style={{ fontSize: 15, color: '#ef4444', flexShrink: 0 }} />
+                                  <span style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {sup.contactAddress || 'Central Distribution Hub'}
+                                  </span>
+                                </div>
+                              )}
                             </td>
 
                             {/* Catalog */}
@@ -506,20 +618,51 @@ export default function SuppliersPage({
                               </div>
                             </td>
 
-                            {/* Action: Replenish */}
+                            {/* Action: Inline Edit / Save */}
                             <td style={{ textAlign: 'right' }}>
-                              <button
-                                type="button"
-                                className="btn-replenish"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleReplenishSupplier(sup.id);
-                                }}
-                                aria-label={`Replenish catalog from ${sup.name}`}
-                              >
-                                <span>Replenish</span>
-                                <span aria-hidden="true">→</span>
-                              </button>
+                              {isEditing ? (
+                                <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+                                  <button
+                                    type="button"
+                                    className="btn-inline-save"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSaveInlineEdit();
+                                    }}
+                                    disabled={isSaving}
+                                    title="Save supplier updates to database"
+                                  >
+                                    <SaveIcon style={{ fontSize: 15 }} />
+                                    <span>{isSaving ? 'Saving...' : 'Save'}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-inline-cancel"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      cancelEditing();
+                                    }}
+                                    disabled={isSaving}
+                                    title="Cancel editing"
+                                  >
+                                    <CloseIcon style={{ fontSize: 15 }} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn-inline-edit"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    startEditing(sup);
+                                  }}
+                                  title={`Edit supplier ${sup.name}`}
+                                  aria-label={`Edit ${sup.name}`}
+                                >
+                                  <EditIcon style={{ fontSize: 14 }} />
+                                  <span>Edit</span>
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );
@@ -529,79 +672,10 @@ export default function SuppliersPage({
                 </table>
               </div>
 
-              {/* Table Footer with Quick Actions and Pagination */}
-              <div className="redesign-table-footer">
-                <div style={{ position: 'relative' }}>
-                  <button
-                    type="button"
-                    className="redesign-back-btn"
-                    style={{ fontSize: 12, padding: '5px 12px' }}
-                    onClick={() => setQuickActionsOpen((prev) => !prev)}
-                    aria-expanded={quickActionsOpen}
-                    aria-haspopup="true"
-                  >
-                    <span>⚡ Quick Actions</span>
-                    <span style={{ fontSize: 10, marginLeft: 2 }}>▼</span>
-                  </button>
-
-                  {quickActionsOpen && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        bottom: '100%',
-                        left: 0,
-                        marginBottom: 6,
-                        background: 'var(--surface)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 8,
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-                        minWidth: 180,
-                        zIndex: 50,
-                        padding: 4,
-                      }}
-                    >
-                      <button
-                        type="button"
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: '8px 12px',
-                          fontSize: 12,
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--text)',
-                          cursor: 'pointer',
-                          borderRadius: 4,
-                        }}
-                        onClick={() => {
-                          setQuickActionsOpen(false);
-                          showToast('Supplier catalog exported as CSV.');
-                        }}
-                      >
-                        Export Supplier CSV
-                      </button>
-                      <button
-                        type="button"
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: '8px 12px',
-                          fontSize: 12,
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--text)',
-                          cursor: 'pointer',
-                          borderRadius: 4,
-                        }}
-                        onClick={() => {
-                          setQuickActionsOpen(false);
-                          onNavigateTo && onNavigateTo('manifests');
-                        }}
-                      >
-                        Track Inbound Manifests
-                      </button>
-                    </div>
-                  )}
+              {/* Table Footer with Pagination */}
+              <div className="redesign-table-footer" style={{ justifyContent: 'space-between' }}>
+                <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                  Total {filteredSuppliers.length} active suppliers
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -782,16 +856,18 @@ export default function SuppliersPage({
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4 }}>
-                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>📍 Central Distribution Hub</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 6 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                        📍 {sup.contactAddress || 'Central Distribution Hub'}
+                      </div>
                       <button
                         type="button"
-                        className="btn-replenish"
-                        onClick={() => handleReplenishSupplier(sup.id)}
-                        style={{ minHeight: 40 }}
-                        aria-label={`Replenish catalog from ${sup.name}`}
+                        className="btn-inline-edit"
+                        onClick={() => startEditing(sup)}
+                        style={{ minHeight: 34, padding: '5px 12px' }}
+                        aria-label={`Edit ${sup.name}`}
                       >
-                        Replenish →
+                        <EditIcon style={{ fontSize: 14, marginRight: 4 }} /> Edit
                       </button>
                     </div>
                   </div>

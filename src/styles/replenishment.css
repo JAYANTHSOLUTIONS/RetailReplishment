@@ -7519,3 +7519,183 @@ button, input, select, textarea, .btn-replenish, .btn-delivered-action {
   accent-color: var(--brand);
   cursor: pointer;
 }
+
+/* ─── Modern Icon Back Button for Subheaders ─── */
+.redesign-icon-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+.redesign-icon-back-btn:hover {
+  background: var(--surface-hover, var(--surface2));
+  border-color: var(--brand);
+  color: var(--brand);
+  transform: translateX(-2px);
+}
+.redesign-icon-back-btn:active {
+  transform: translateX(-1px) scale(0.96);
+}
+
+/* ─── Redesign Action Buttons (History & Desk) ─── */
+.redesign-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.redesign-action-btn.primary {
+  background: var(--brand, #2563eb) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--brand, #2563eb) !important;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);
+}
+.redesign-action-btn.primary:hover {
+  background: var(--brand-hover, #1d4ed8) !important;
+  border-color: var(--brand-hover, #1d4ed8) !important;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+.redesign-action-btn.secondary {
+  background: var(--surface);
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+.redesign-action-btn.secondary:hover {
+  background: var(--surface2);
+  color: var(--text);
+  border-color: var(--border-hover);
+}
+
+/* ─── Inline Editing Inputs & Buttons (Suppliers Directory) ─── */
+.inline-edit-input {
+  width: 100%;
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--brand, #2563eb);
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  transition: border-color 0.15s ease;
+}
+.inline-edit-input.sub {
+  font-size: 11px;
+  border-color: var(--border);
+  color: var(--text2);
+}
+.inline-edit-input.sub:focus {
+  border-color: var(--brand);
+}
+.inline-edit-input.num {
+  text-align: right;
+  font-weight: 600;
+}
+.btn-inline-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-inline-edit:hover {
+  border-color: var(--brand);
+  background: var(--brand-bg, rgba(37, 99, 235, 0.08));
+  color: var(--brand);
+}
+.btn-inline-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: #16a34a;
+  border: 1px solid #16a34a;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-inline-save:hover:not(:disabled) {
+  background: #15803d;
+  border-color: #15803d;
+  transform: translateY(-1px);
+}
+.btn-inline-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-inline-cancel:hover {
+  color: #ef4444;
+  border-color: #ef4444;
+}
+tr.row-editing {
+  background: var(--surface-hover, rgba(37, 99, 235, 0.03)) !important;
+}
+
+/* ─── Theme Switcher Animations ─── */
+@keyframes sun-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes moon-rock {
+  0% { transform: scale(1) rotate(-8deg); }
+  50% { transform: scale(1.12) rotate(12deg); }
+  100% { transform: scale(1) rotate(-8deg); }
+}
+
+.theme-icon-sun {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #f59e0b;
+  animation: sun-spin 6s linear infinite;
+}
+
+.theme-icon-moon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #818cf8;
+  animation: moon-rock 2.8s ease-in-out infinite;
+}
+
+.theme-icon-system {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+}
+

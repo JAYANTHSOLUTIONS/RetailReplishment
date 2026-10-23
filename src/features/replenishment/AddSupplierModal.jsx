@@ -11,6 +11,8 @@ import {
   sanitizeAlphaName,
 } from '../../utils/validation.js';
 
+import BusinessIcon from '@mui/icons-material/Business';
+
 const DEFAULT_SUPPLIER_CATEGORIES = [
   'Dairy & Bakery',
   'Bakery',
@@ -37,6 +39,7 @@ export default function AddSupplierModal({
   const [leadTime, setLeadTime] = useState('3d');
   const [targetMoq, setTargetMoq] = useState('5000');
   const [unitThreshold, setUnitThreshold] = useState('0');
+  const [contactAddress, setContactAddress] = useState('');
 
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -80,6 +83,7 @@ export default function AddSupplierModal({
         contactRep: contactRep.trim(),
         contactEmail: contactEmail.trim(),
         contactPhone: contactPhone.trim(),
+        contactAddress: contactAddress.trim(),
         leadTime: leadTime.trim() || '3d',
         targetMoq: parseFloat(targetMoq),
         unitThreshold: parseInt(unitThreshold, 10) || 0,
@@ -99,14 +103,7 @@ export default function AddSupplierModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Add New Supplier Vendor"
-      icon={
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        </svg>
-      }
+      icon={<BusinessIcon style={{ fontSize: 20, color: 'var(--brand)' }} />}
       size="lg"
       contentClassName="add-supplier-card"
       formProps={{
@@ -307,6 +304,21 @@ export default function AddSupplierModal({
                 aria-describedby={errors.leadTime ? 'sup-lead-err' : undefined}
               />
               {errors.leadTime && <span id="sup-lead-err" className="field-error">{errors.leadTime}</span>}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="sup-address">
+                Warehouse / Office Address
+              </label>
+              <input
+                id="sup-address"
+                type="text"
+                maxLength={200}
+                className="form-input"
+                placeholder="e.g. Plot 42, Sector 18, Industrial Area, Gurgaon"
+                value={contactAddress}
+                onChange={(e) => setContactAddress(e.target.value)}
+              />
             </div>
 
     </Modal>
