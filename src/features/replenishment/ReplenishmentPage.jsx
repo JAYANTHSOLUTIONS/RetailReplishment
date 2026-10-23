@@ -30,6 +30,14 @@ import mainLogo from '../../assets/logos/main-logo.png';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
 import { validateOrderQtyInput, sanitizeIntegerInput } from '../../utils/validation.js';
 import { ThemeSwitcher, StatusBadge, KeyboardShortcutsModal, Modal, Button } from '../../components/ui';
+import {
+  ReplenishmentTopbar,
+  SupplierQueueRail,
+  OrderDraftPanel,
+  SupplierContactModal,
+  PendingManifestsModal,
+  POHistoryModal,
+} from './components';
 
 // Helper currency formatter
 const formatCurrency = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
@@ -309,7 +317,6 @@ export default function ReplenishmentPage({
   const [acknowledgedReorders, setAcknowledgedReorders] = useState(new Set());
 
   // Profile and Theme Preference State
-  const [profileOpen, setProfileOpen] = useState(false);
   const [localThemePreference, setLocalThemePreference] = useState(() => {
     return localStorage.getItem('stockdesk_theme') || 'system';
   });
@@ -318,25 +325,15 @@ export default function ReplenishmentPage({
   // Mobile View Mode ('matrix' | 'draft')
   const [mobileView, setMobileView] = useState('matrix');
 
-  // Responsive Tablet/Mobile Header Controls (Bootstrap < lg: < 992px)
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const mobileSearchInputRef = useRef(null);
-  const mobileMenuRef = useRef(null);
+  // Mobile matrix 3-dots actions menu state
+  const [mobileMatrixMenuOpen, setMobileMatrixMenuOpen] = useState(false);
+  const mobileMatrixMenuRef = useRef(null);
 
-  // Auto-focus mobile search input when expanded
   useEffect(() => {
-    if (mobileSearchOpen) {
-      setTimeout(() => mobileSearchInputRef.current?.focus(), 60);
-    }
-  }, [mobileSearchOpen]);
-
-  // Click-outside listener to close 3-dot mobile menu
-  useEffect(() => {
-    if (!mobileMenuOpen) return;
+    if (!mobileMatrixMenuOpen) return;
     const handleOutsideClick = (e) => {
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
-        setMobileMenuOpen(false);
+      if (mobileMatrixMenuRef.current && !mobileMatrixMenuRef.current.contains(e.target)) {
+        setMobileMatrixMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleOutsideClick);
@@ -345,7 +342,8 @@ export default function ReplenishmentPage({
       document.removeEventListener('mousedown', handleOutsideClick);
       document.removeEventListener('touchstart', handleOutsideClick);
     };
-  }, [mobileMenuOpen]);
+  }, [mobileMatrixMenuOpen]);
+
 
   // Multi-Supplier PO Draft Queue Accordions State
   const [expandedDraftSupplierIds, setExpandedDraftSupplierIds] = useState(() => new Set());
@@ -1563,10 +1561,6 @@ export default function ReplenishmentPage({
           setReorderConfirmProd(null);
           return;
         }
-        if (profileOpen) {
-          setProfileOpen(false);
-          return;
-        }
         if (manifestsModalOpen) {
           setManifestsModalOpen(false);
           return;
@@ -1607,7 +1601,6 @@ export default function ReplenishmentPage({
         Boolean(confirmModalConfig) ||
         saveAllModalOpen ||
         Boolean(reorderConfirmProd) ||
-        profileOpen ||
         manifestsModalOpen ||
         poHistoryModalOpen ||
         contactModalOpen ||
@@ -1810,359 +1803,29 @@ export default function ReplenishmentPage({
 
   return (
     <div className="rp">
-      {/* ─── Top Bar ──────────────────────────────────────────────────────── */}
-      <header className={`topbar ${mobileSearchOpen ? 'topbar--search-open' : ''}`}>
-        {mobileSearchOpen ? (
-          <div className="topbar-search-expanded" role="search">
-            <span className="search-icon" aria-hidden="true">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
-            </span>
-            <input
-              ref={mobileSearchInputRef}
-              type="text"
-              className="topbar-search-expanded-inp"
-              placeholder="Search SKU, item name, supplier..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setMobileSearchOpen(false);
-              }}
-              aria-label="Search replenishment catalog"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                className="topbar-search-clear-btn"
-                onClick={() => {
-                  setSearchTerm('');
-                  mobileSearchInputRef.current?.focus();
-                }}
-                aria-label="Clear search query"
-              >
-                ✕
-              </button>
-            )}
-            <button
-              type="button"
-              className="topbar-search-close-btn"
-              onClick={() => setMobileSearchOpen(false)}
-              aria-label="Close search bar"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="topbar-brand">
-              {windowWidth < 768 && (
-                <button
-                  type="button"
-                  className="btn-hamburger"
-                  onClick={() => setMobileSidebarOpen(true)}
-                  aria-label="Open navigation sidebar"
-                  title="Open sidebar"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="3" y1="12" x2="21" y2="12" />
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <line x1="3" y1="18" x2="21" y2="18" />
-                  </svg>
-                </button>
-              )}
-              <span className="brand-name">StockDesk</span>
-            </div>
+      {/* ─── Top Bar & Mobile Navigation Drawer ─── */}
+      <ReplenishmentTopbar
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        searchInputRef={searchInputRef}
+        windowWidth={windowWidth}
+        mobileSidebarOpen={mobileSidebarOpen}
+        setMobileSidebarOpen={setMobileSidebarOpen}
+        setShortcutsModalOpen={setShortcutsModalOpen}
+        setAddProductModalOpen={setAddProductModalOpen}
+        setAddSupplierModalOpen={setAddSupplierModalOpen}
+        themePreference={themePreference}
+        handleSelectTheme={handleSelectTheme}
+        mainLogo={mainLogo}
+        onNavigateToManifests={onNavigateToManifests}
+        onNavigateToSuppliers={onNavigateToSuppliers}
+        suppliers={suppliers}
+        activeQueueSupplierId={activeQueueSupplierId}
+        setActiveQueueSupplierId={setActiveQueueSupplierId}
+        handleSelectQueueSupplier={handleSelectQueueSupplier}
+        supplierLogos={SUPPLIER_LOGOS}
+      />
 
-            {/* Desktop Global Search Bar (>= 992px) */}
-            {windowWidth >= 992 && (
-              <div className="topbar-search">
-                <div className="search-box">
-                  <span className="search-icon">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="11" cy="11" r="8" />
-                      <path d="m21 21-4.3-4.3" />
-                    </svg>
-                  </span>
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    className="search-inp"
-                    placeholder="Search SKU, item name, supplier..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    aria-label="Search replenishment catalog"
-                  />
-                  <span
-                    className="search-badge"
-                    onClick={() => searchInputRef.current?.focus()}
-                    style={{ cursor: 'pointer' }}
-                    title="Focus global search (Ctrl+K)"
-                  >
-                    Ctrl+K
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <div className="topbar-right" style={{ position: 'relative' }}>
-              {/* Search Icon Toggle (< 992px) - placed BEFORE profile view */}
-              {windowWidth < 992 && (
-                <button
-                  type="button"
-                  className="btn-search-toggle"
-                  onClick={() => setMobileSearchOpen(true)}
-                  aria-label="Open search bar"
-                  title="Search catalog"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="m21 21-4.3-4.3" />
-                  </svg>
-                  {searchTerm && <span className="search-active-dot" />}
-                </button>
-              )}
-
-              {/* Desktop Keyboard Shortcuts Button: Single '?' button */}
-              {windowWidth >= 768 && (
-                <button
-                  type="button"
-                  className="btn-kbd-shortcuts-compact"
-                  onClick={() => setShortcutsModalOpen(true)}
-                  title="Keyboard Shortcuts (Press ?)"
-                  aria-label="Keyboard Shortcuts"
-                >
-                  ?
-                </button>
-              )}
-
-              {/* Tablet 3-Dot Actions Dropdown (768px <= width < 992px) */}
-              {windowWidth >= 768 && windowWidth < 992 && (
-                <div className="mobile-header-menu-wrap" ref={mobileMenuRef} style={{ position: 'relative' }}>
-                  <button
-                    type="button"
-                    className={`btn-three-dots ${mobileMenuOpen ? 'active' : ''}`}
-                    onClick={() => setMobileMenuOpen((prev) => !prev)}
-                    aria-label="Actions Menu"
-                    aria-haspopup="true"
-                    aria-expanded={mobileMenuOpen}
-                    title="Actions Menu"
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="5" r="1.5" fill="currentColor" />
-                      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-                      <circle cx="12" cy="19" r="1.5" fill="currentColor" />
-                    </svg>
-                  </button>
-
-                  {mobileMenuOpen && (
-                    <div className="mobile-actions-dropdown" role="menu">
-                      <button
-                        type="button"
-                        className="mobile-action-item"
-                        onClick={() => {
-                          setMobileMenuOpen(false);
-                          setAddProductModalOpen(true);
-                        }}
-                        role="menuitem"
-                      >
-                        <span className="mobile-action-icon">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="12" y1="5" x2="12" y2="19" />
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                          </svg>
-                        </span>
-                        <span className="mobile-action-text">Add Product</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="mobile-action-item"
-                        onClick={() => {
-                          setMobileMenuOpen(false);
-                          setAddSupplierModalOpen(true);
-                        }}
-                        role="menuitem"
-                      >
-                        <span className="mobile-action-icon">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                            <circle cx="9" cy="7" r="4" />
-                            <line x1="19" y1="8" x2="19" y2="14" />
-                            <line x1="22" y1="11" x2="16" y2="11" />
-                          </svg>
-                        </span>
-                        <span className="mobile-action-text">Add Supplier</span>
-                      </button>
-
-                      <div className="mobile-action-sep" />
-
-                      <button
-                        type="button"
-                        className="mobile-action-item"
-                        onClick={() => {
-                          setMobileMenuOpen(false);
-                          setShortcutsModalOpen(true);
-                        }}
-                        role="menuitem"
-                      >
-                        <span className="mobile-action-icon">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="2" y="4" width="20" height="16" rx="2" />
-                            <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8" />
-                          </svg>
-                        </span>
-                        <span className="mobile-action-text">Keyboard Shortcuts</span>
-                        <kbd className="mobile-action-kbd">?</kbd>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Topbar Theme Switcher (>= 768px only; mobile has it inside the 3-dot menu) */}
-              {windowWidth >= 768 && (
-                <ThemeSwitcher
-                  value={themePreference}
-                  onChange={handleSelectTheme}
-                  className="topbar-theme-switcher"
-                />
-              )}
-
-              {/* User profile button with dropdown */}
-              <div style={{ position: 'relative' }}>
-                <button
-                  className={`user-btn ${profileOpen ? 'active' : ''}`}
-                  onClick={() => setProfileOpen((prev) => !prev)}
-                  aria-expanded={profileOpen}
-                  aria-haspopup="true"
-                  aria-label="User Profile and Theme Settings"
-                >
-                  <div className="user-av">SM</div>
-                  <div className="user-info">
-                    <span className="user-name">Store Manager</span>
-                    <span className="user-store">Riverside Mart</span>
-                  </div>
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </header>
-
-      {/* ─── Mobile Sidebar Navigation Drawer (opened by hamburger) ──────── */}
-      {windowWidth < 768 && mobileSidebarOpen && (
-        <div className="mobile-sidebar-container" role="dialog" aria-modal="true" aria-label="Navigation drawer">
-          <div
-            className="mobile-sidebar-overlay"
-            onClick={() => setMobileSidebarOpen(false)}
-            aria-label="Close navigation sidebar"
-          />
-          <aside className="mobile-sidebar-drawer">
-            <div className="mobile-sidebar-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <img src={mainLogo} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain' }} />
-                <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>StockDesk</span>
-              </div>
-              <button
-                type="button"
-                className="mobile-sidebar-close-btn"
-                onClick={() => setMobileSidebarOpen(false)}
-                aria-label="Close sidebar"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mobile-sidebar-user-card">
-              <div className="user-av" style={{ width: 34, height: 34, fontSize: 13 }}>SM</div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>Store Manager</span>
-                <span style={{ fontSize: 11, color: 'var(--text3)' }}>Riverside Mart</span>
-              </div>
-            </div>
-
-            <div className="mobile-sidebar-nav-list">
-              <div className="mobile-sidebar-section-title">Navigation</div>
-              <button type="button" className="mobile-sidebar-nav-item" onClick={() => setMobileSidebarOpen(false)}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-                <span>Dashboard</span>
-              </button>
-              <button type="button" className="mobile-sidebar-nav-item" onClick={() => setMobileSidebarOpen(false)}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                <span>Inventory</span>
-              </button>
-              <button type="button" className="mobile-sidebar-nav-item active" onClick={() => setMobileSidebarOpen(false)}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                <span>Replenishment Desk</span>
-              </button>
-              <button
-                type="button"
-                className="mobile-sidebar-nav-item"
-                onClick={() => {
-                  setMobileSidebarOpen(false);
-                  onNavigateToManifests();
-                }}
-              >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-                <span>Inbound Manifests</span>
-              </button>
-              <button
-                type="button"
-                className="mobile-sidebar-nav-item"
-                onClick={() => {
-                  setMobileSidebarOpen(false);
-                  if (onNavigateToSuppliers) onNavigateToSuppliers();
-                }}
-              >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                <span>Suppliers</span>
-              </button>
-              <button type="button" className="mobile-sidebar-nav-item" onClick={() => setMobileSidebarOpen(false)}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                <span>Analytics</span>
-              </button>
-            </div>
-
-            <div className="mobile-sidebar-sq-section">
-              <div className="mobile-sidebar-section-title">Filter by Supplier</div>
-              <div className="mobile-sidebar-sq-list">
-                {suppliers.map((sup) => {
-                  const isFilterActive = activeQueueSupplierId === sup.id;
-                  return (
-                    <button
-                      key={sup.id}
-                      type="button"
-                      className={`mobile-sidebar-sup-item ${isFilterActive ? 'active' : ''}`}
-                      onClick={() => {
-                        if (activeQueueSupplierId === sup.id) {
-                          setActiveQueueSupplierId(null);
-                        } else {
-                          handleSelectQueueSupplier(sup.id);
-                        }
-                        setMobileSidebarOpen(false);
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {SUPPLIER_LOGOS[sup.id] ? (
-                          <img src={SUPPLIER_LOGOS[sup.id]} alt="" style={{ width: 22, height: 22, objectFit: 'contain', borderRadius: 4, background: '#fff', border: '1px solid #e2e8f0' }} />
-                        ) : (
-                          <div style={{ width: 22, height: 22, borderRadius: 4, background: sup.color, color: '#fff', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
-                            {sup.initials}
-                          </div>
-                        )}
-                        <span style={{ fontSize: 13, fontWeight: 500 }}>{sup.name}</span>
-                      </div>
-                      {isFilterActive && <span style={{ fontSize: 11, color: 'var(--brand)', fontWeight: 700 }}>✓</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </aside>
-        </div>
-      )}
 
       {/* ─── Main Workspace: 4-Column Layout with Smooth Side Animation ─── */}
       <div className="rp-body" style={gridColumns ? { gridTemplateColumns: gridColumns } : undefined}>
@@ -2231,182 +1894,24 @@ export default function ReplenishmentPage({
         </nav>
 
         {/* Col 2: Supplier Queue Sidebar (Left Side of Table) - Desktop & Tablet only */}
-        {windowWidth >= 768 && (
-          <aside
-            id="collapse-supplier-queue"
-            className={`sq collapse-horizontal ${!sqExpanded ? 'is-collapsed' : ''}`}
-            aria-label="Supplier Queue"
-          >
-            <div
-              className="collapsed-rail"
-              onClick={() => setSqExpanded(true)}
-              title="Click to expand Supplier Queue"
-            >
-              <button
-                id="btn-expand-sq"
-                className="collapsed-rail-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSqExpanded(true);
-                }}
-                aria-label="Expand Supplier Queue"
-                aria-expanded={sqExpanded}
-                aria-controls="collapse-supplier-queue"
-              >
-                »
-              </button>
-              {/* <img src={queueLogo} alt="" className="rail-queue-logo" /> */}
-              <span className="collapsed-rail-txt">
-                Supplier Queue ({activeQueueSuppliers.length})
-              </span>
-            </div>
+        <SupplierQueueRail
+          windowWidth={windowWidth}
+          sqExpanded={sqExpanded}
+          setSqExpanded={setSqExpanded}
+          handleCollapseSq={handleCollapseSq}
+          activeQueueSuppliers={activeQueueSuppliers}
+          selectedSupplierId={selectedSupplierId}
+          activeQueueSupplierId={activeQueueSupplierId}
+          products={products}
+          validateSupplierMoq={validateSupplierMoq}
+          formatCurrency={formatCurrency}
+          handleSelectQueueSupplier={handleSelectQueueSupplier}
+          supplierLogos={SUPPLIER_LOGOS}
+          handleOpenManifests={handleOpenManifests}
+          handleOpenPOHistory={handleOpenPOHistory}
+          handleOpenContact={handleOpenContact}
+        />
 
-            <div
-              className="collapse-horizontal-inner"
-              inert={!sqExpanded ? '' : undefined}
-            >
-              <div className="sq-head">
-                <div className="sq-head-l" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {/* <img src={queueLogo} alt="" className="section-queue-logo" /> */}
-                  <span>Supplier Queue</span>
-                  <span className="sq-cnt">({activeQueueSuppliers.length})</span>
-                </div>
-                <button
-                  id="btn-collapse-sq"
-                  className="sec-toggle-btn"
-                  onClick={handleCollapseSq}
-                  aria-label="Collapse Supplier Queue"
-                  title="Collapse Supplier Queue"
-                  aria-expanded={sqExpanded}
-                  aria-controls="collapse-supplier-queue"
-                >
-                  «
-                </button>
-              </div>
-
-              <div className="sq-cards">
-                {activeQueueSuppliers.map((sup) => {
-                  const isActive = sup.id === selectedSupplierId;
-                  const isFilterActive = activeQueueSupplierId === sup.id;
-                  const supSelectedItems = products.filter((p) => p.supplierId === sup.id && p.selected && p.orderQty > 0 && p.orderStatus !== 'ordered');
-                  const supValidation = validateSupplierMoq(sup, supSelectedItems);
-
-                  return (
-                    <div
-                      key={sup.id}
-                      className={`sc ${isActive ? 'active' : ''} ${isFilterActive ? 'sc-filter-active' : ''}`}
-                      onClick={() => handleSelectQueueSupplier(sup.id)}
-                      tabIndex={0}
-                      role="button"
-                      aria-pressed={isActive}
-                      title={`Select ${sup.name} to view details and filter matrix products`}
-                    >
-                      <div className="sc-top">
-                        <div className="sc-av" style={!SUPPLIER_LOGOS[sup.id] ? { background: sup.color } : undefined}>
-                          {SUPPLIER_LOGOS[sup.id] ? (
-                            <img src={SUPPLIER_LOGOS[sup.id]} alt={sup.name} />
-                          ) : (
-                            sup.initials
-                          )}
-                        </div>
-                        <div className="sc-info">
-                          <span className="sc-name">{sup.name}</span>
-                          <span className="sc-cat">{sup.category}</span>
-                        </div>
-                        <div className="sc-chev">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="9 18 15 12 9 6" />
-                          </svg>
-                        </div>
-                      </div>
-
-                      {supSelectedItems.length === 0 ? (
-                        <div className="sc-meta" style={{ marginTop: 8 }}>
-                          <span className="sc-meta-item">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                              <line x1="16" y1="2" x2="16" y2="6" />
-                              <line x1="8" y1="2" x2="8" y2="6" />
-                              <line x1="3" y1="10" x2="21" y2="10" />
-                            </svg>
-                            Lead Time: {sup.leadTime}
-                          </span>
-                          <span className="sc-meta-item">
-                            MOQ: {formatCurrency(sup.targetMoq)}
-                          </span>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="sc-bar">
-                            <div
-                              className={`sc-bar-fill ${supValidation.isMoqMet ? 'green' : 'amber'}`}
-                              style={{ width: `${Math.min(100, Math.round((supValidation.subtotal / (sup.targetMoq || 1)) * 100))}%` }}
-                            ></div>
-                          </div>
-                          <div className="sc-val">
-                            <span className="sc-curr">{formatCurrency(supValidation.subtotal)}</span>
-                            <span className="sc-target">
-                              / {formatCurrency(sup.targetMoq)} {supValidation.isMoqMet ? '(MOQ Met)' : `(${formatCurrency(supValidation.remainingAmount)} remaining)`}
-                            </span>
-                          </div>
-                          <div className="sc-meta">
-                            <span className="sc-meta-item">
-                              <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: supValidation.isMoqMet ? '#10b981' : '#d97706' }}></span>
-                              {supSelectedItems.length} items Selected
-                            </span>
-                            <span className="sc-meta-item">
-                              Lead Time: {sup.leadTime}
-                            </span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Quick Actions in Left Panel */}
-              <div className="sq-qa">
-                <div className="sq-qa-title">Quick Actions</div>
-                <button className="sq-qa-btn" onClick={handleOpenManifests}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="8" y1="6" x2="21" y2="6" />
-                    <line x1="8" y1="12" x2="21" y2="12" />
-                    <line x1="8" y1="18" x2="21" y2="18" />
-                    <line x1="3" y1="6" x2="3.01" y2="6" />
-                    <line x1="3" y1="12" x2="3.01" y2="12" />
-                    <line x1="3" y1="18" x2="3.01" y2="18" />
-                  </svg>
-                  <span>View pending manifests</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </button>
-                <button className="sq-qa-btn" onClick={handleOpenPOHistory}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                  </svg>
-                  <span>PO history</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </button>
-                <button className="sq-qa-btn" onClick={handleOpenContact}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                  </svg>
-                  <span>Contact supplier</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </aside>
-        )}
 
         {/* Col 3: Center Replenishment Matrix */}
         <main
@@ -2722,14 +2227,14 @@ export default function ReplenishmentPage({
                     </button>
 
                     {/* 3-Dot Dropdown Menu next to Filter icon */}
-                    <div className="mobile-matrix-menu-wrap" ref={mobileMenuRef} style={{ position: 'relative' }}>
+                    <div className="mobile-matrix-menu-wrap" ref={mobileMatrixMenuRef} style={{ position: 'relative' }}>
                       <button
                         type="button"
-                        className={`mobile-matrix-three-dots ${mobileMenuOpen ? 'active' : ''}`}
-                        onClick={() => setMobileMenuOpen((prev) => !prev)}
+                        className={`mobile-matrix-three-dots ${mobileMatrixMenuOpen ? 'active' : ''}`}
+                        onClick={() => setMobileMatrixMenuOpen((prev) => !prev)}
                         aria-label="More actions and settings"
                         aria-haspopup="true"
-                        aria-expanded={mobileMenuOpen}
+                        aria-expanded={mobileMatrixMenuOpen}
                         title="Actions & Settings"
                       >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2739,13 +2244,13 @@ export default function ReplenishmentPage({
                         </svg>
                       </button>
 
-                      {mobileMenuOpen && (
+                      {mobileMatrixMenuOpen && (
                         <div className="mobile-actions-dropdown" role="menu">
                           <button
                             type="button"
                             className="mobile-action-item"
                             onClick={() => {
-                              setMobileMenuOpen(false);
+                              setMobileMatrixMenuOpen(false);
                               setAddProductModalOpen(true);
                             }}
                             role="menuitem"
@@ -2763,7 +2268,7 @@ export default function ReplenishmentPage({
                             type="button"
                             className="mobile-action-item"
                             onClick={() => {
-                              setMobileMenuOpen(false);
+                              setMobileMatrixMenuOpen(false);
                               setAddSupplierModalOpen(true);
                             }}
                             role="menuitem"
@@ -2783,7 +2288,7 @@ export default function ReplenishmentPage({
                             type="button"
                             className="mobile-action-item"
                             onClick={() => {
-                              setMobileMenuOpen(false);
+                              setMobileMatrixMenuOpen(false);
                               setShortcutsModalOpen(true);
                             }}
                             role="menuitem"
@@ -2812,6 +2317,7 @@ export default function ReplenishmentPage({
                         </div>
                       )}
                     </div>
+
                   </div>
                 </div>
 
@@ -3673,494 +3179,55 @@ export default function ReplenishmentPage({
         </main>
 
         {/* Col 4: Purchase Order Draft & Supplier Review Summary (Right Side of Table) - Desktop & Tablet only */}
-        {windowWidth >= 768 && (
-          <aside
-            id="collapse-po-draft"
-            className={`po collapse-horizontal ${!draftExpanded ? 'is-collapsed' : ''}`}
-            aria-label="Purchase Order Draft & Supplier Review Summary"
-          >
-            <div
-              className="collapsed-rail"
-              onClick={() => setDraftExpanded(true)}
-              title="Click to expand Purchase Order Draft"
-            >
-              <button
-                id="btn-expand-draft"
-                className="collapsed-rail-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDraftExpanded(true);
-                }}
-                aria-label="Expand Purchase Order Draft"
-                aria-expanded={draftExpanded}
-                aria-controls="collapse-po-draft"
-              >
-                «
-              </button>
-              {/* <img src={draftLogo} alt="" className="rail-draft-logo" /> */}
-              <span className="collapsed-rail-txt">
-                PO Draft Queue ({allSelectedItems.length})
-              </span>
-            </div>
+        <OrderDraftPanel
+          windowWidth={windowWidth}
+          draftExpanded={draftExpanded}
+          setDraftExpanded={setDraftExpanded}
+          handleCollapseDraft={handleCollapseDraft}
+          allSelectedItems={allSelectedItems}
+          selectedSupplierGroups={selectedSupplierGroups}
+          expandedDraftSupplierIds={expandedDraftSupplierIds}
+          toggleDraftAccordion={toggleDraftAccordion}
+          supplierLogos={SUPPLIER_LOGOS}
+          formatCurrency={formatCurrency}
+          handleDraftQtyChange={handleDraftQtyChange}
+          handleRemoveItemFromDraft={handleRemoveItemFromDraft}
+          handlePromptCancel={handlePromptCancel}
+          handlePromptSaveDraft={handlePromptSaveDraft}
+          handlePromptSubmitPO={handlePromptSubmitPO}
+          isDispatching={isDispatching}
+        />
 
-            <div
-              className="collapse-horizontal-inner"
-              inert={!draftExpanded ? '' : undefined}
-            >
-              <div className="po-head">
-                <div className="po-head-l" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className="po-title">PO Draft Queue</span>
-                  <span
-                    style={{
-                      background: 'var(--brand-bg, rgba(56, 139, 253, 0.15))',
-                      color: 'var(--brand, #2563eb)',
-                      border: '1px solid var(--brand-border, rgba(56, 139, 253, 0.4))',
-                      padding: '2px 8px',
-                      borderRadius: 12,
-                      fontSize: 11,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {selectedSupplierGroups.length} {selectedSupplierGroups.length === 1 ? 'Supplier' : 'Suppliers'} • {allSelectedItems.length} SKUs
-                  </span>
-                </div>
-                <button
-                  id="btn-collapse-draft"
-                  className="sec-toggle-btn"
-                  onClick={handleCollapseDraft}
-                  aria-label="Collapse Purchase Order Draft"
-                  title="Collapse Purchase Order Draft"
-                  aria-expanded={draftExpanded}
-                  aria-controls="collapse-po-draft"
-                >
-                  »
-                </button>
-              </div>
-
-              <div className="po-scroll-content">
-                {selectedSupplierGroups.length === 0 ? (
-                  <div className="po-sec">
-                    <div className="po-empty" style={{ padding: '48px 16px', textAlign: 'center' }}>
-                      <div className="po-empty-icon" style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
-                        No supplier drafts in queue
-                      </div>
-                      <div className="po-empty-txt">
-                        Select product checkboxes from the matrix to build supplier purchase orders.
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px' }}>
-                    {selectedSupplierGroups.map((group) => {
-                      const sup = group.supplier;
-                      const v = group.validation;
-                      const isAccordionOpen = expandedDraftSupplierIds.has(sup.id);
-                      const moqTarget = Number(sup.targetMoq ?? sup.target_moq) || 0;
-                      const unitThreshold = Number(sup.unitThreshold ?? sup.unit_threshold) || 0;
-                      const moqPercent = Math.min(100, Math.round((group.subtotal / (moqTarget || 1)) * 100));
-                      const unitsPercent = Math.min(100, Math.round((group.totalUnits / (unitThreshold || 1)) * 100));
-
-                      return (
-                        <div key={sup.id} className="draft-accordion-card">
-                          {/* Accordion Header */}
-                          <div
-                            className={`draft-accordion-header ${isAccordionOpen ? 'is-open' : ''}`}
-                            onClick={() => toggleDraftAccordion(sup.id)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                toggleDraftAccordion(sup.id);
-                              }
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                              {SUPPLIER_LOGOS[sup.id] ? (
-                                <img
-                                  src={SUPPLIER_LOGOS[sup.id]}
-                                  alt=""
-                                  style={{ width: 24, height: 24, borderRadius: 5, objectFit: 'contain', background: '#fff', border: '1px solid var(--border)', padding: 1 }}
-                                />
-                              ) : (
-                                <div style={{ width: 24, height: 24, borderRadius: 5, background: sup.color || 'var(--brand)', color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  {sup.initials || sup.name.slice(0, 2).toUpperCase()}
-                                </div>
-                              )}
-                              <div style={{ minWidth: 0 }}>
-                                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {sup.name}
-                                </div>
-                                <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                                  {group.items.length} {group.items.length === 1 ? 'item' : 'items'} • {group.totalUnits} units • {formatCurrency(group.subtotal)}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  fontWeight: 700,
-                                  padding: '2px 7px',
-                                  borderRadius: 10,
-                                  background: v.valid ? 'rgba(16, 185, 129, 0.14)' : 'rgba(217, 119, 6, 0.14)',
-                                  color: v.valid ? '#059669' : '#d97706',
-                                  border: `1px solid ${v.valid ? 'rgba(16, 185, 129, 0.3)' : 'rgba(217, 119, 6, 0.3)'}`,
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {v.valid ? '✔ MOQ Met' : `⚠️ ${formatCurrency(v.remainingAmount)} left`}
-                              </span>
-                              <span
-                                className={`draft-accordion-chevron ${isAccordionOpen ? 'rotated' : ''}`}
-                                aria-hidden="true"
-                                style={{
-                                  transition: 'transform 0.2s ease',
-                                  transform: isAccordionOpen ? 'rotate(180deg)' : 'none',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  color: 'var(--text3)',
-                                }}
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <polyline points="6 9 12 15 18 9" />
-                                </svg>
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Accordion Body */}
-                          {isAccordionOpen && (
-                            <div className="draft-accordion-body">
-                              {/* Minimum Threshold Checklist */}
-                              <div className={`po-checklist ${group.items.length === 0 ? '' : v.valid ? 'pass' : 'fail'}`} style={{ padding: '8px 10px' }}>
-                                <div className="po-check">
-                                  <span className={`po-check-ic ${v.isMoqMet ? 'pass' : 'fail'}`}>
-                                    {v.isMoqMet ? '✔' : '✖'}
-                                  </span>
-                                  <span style={{ fontSize: 11 }}>
-                                    Value: {formatCurrency(group.subtotal)} / {formatCurrency(moqTarget)} ({moqPercent}%)
-                                    {v.isMoqMet ? ' — Met' : ` (${formatCurrency(v.remainingAmount)} remaining)`}
-                                  </span>
-                                </div>
-                                <div className="po-check">
-                                  <span className={`po-check-ic ${v.isUnitsMet ? 'pass' : 'fail'}`}>
-                                    {v.isUnitsMet ? '✔' : '✖'}
-                                  </span>
-                                  <span style={{ fontSize: 11 }}>
-                                    Units: {group.totalUnits} / {unitThreshold} ({unitsPercent}%)
-                                    {v.isUnitsMet ? ' — Met' : ` (${v.remainingUnits} units needed)`}
-                                  </span>
-                                </div>
-
-                                {!v.valid && (
-                                  <div style={{ marginTop: 6 }}>
-                                    <span style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }}>
-                                      ⚠️ {v.message}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Selected Items for this Supplier (Scrollable list with sticky header) */}
-                              <div className="draft-items-list-container" style={{ maxHeight: 130, overflowY: 'auto', overflowX: 'auto', border: '1px solid var(--border-light)', borderRadius: 6, background: 'var(--bg)' }}>
-                                <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
-                                  <thead>
-                                    <tr style={{ position: 'sticky', top: 0, background: 'var(--surface)', borderBottom: '1px solid var(--border)', color: 'var(--text3)', textAlign: 'left', zIndex: 2 }}>
-                                      <th style={{ padding: '6px 4px', fontWeight: 600 }}>Item / SKU</th>
-                                      <th style={{ padding: '6px 4px', textAlign: 'center', fontWeight: 600 }}>Qty</th>
-                                      <th style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 600 }}>Total</th>
-                                      <th style={{ padding: '6px 4px', textAlign: 'center', width: 22 }}></th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {group.items.map((item) => {
-                                      const effectiveQty = item.orderQty;
-                                      const lineSub = effectiveQty * item.unitCost;
-                                      return (
-                                        <tr key={item.id} style={{ borderBottom: '1px solid var(--border-light)' }}>
-                                          <td style={{ padding: '5px 4px' }}>
-                                            <div style={{ fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }} title={item.name}>
-                                              {item.name}
-                                            </div>
-                                            <div style={{ fontSize: 10, color: 'var(--text3)' }}>
-                                              {item.sku} • {formatCurrency(item.unitCost)}
-                                            </div>
-                                          </td>
-                                          <td style={{ padding: '5px 4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                                              <button
-                                                type="button"
-                                                className="draft-qty-btn"
-                                                onClick={() => handleDraftQtyChange(item, -1)}
-                                                title="Decrease quantity"
-                                              >
-                                                -
-                                              </button>
-                                              <span style={{ fontWeight: 700, minWidth: 20, textAlign: 'center', color: 'var(--text)' }}>
-                                                {effectiveQty}
-                                              </span>
-                                              <button
-                                                type="button"
-                                                className="draft-qty-btn"
-                                                onClick={() => handleDraftQtyChange(item, 1)}
-                                                title="Increase quantity"
-                                              >
-                                                +
-                                              </button>
-                                            </div>
-                                          </td>
-                                          <td style={{ padding: '5px 4px', textAlign: 'right', fontWeight: 700, color: 'var(--brand)', whiteSpace: 'nowrap' }}>
-                                            {formatCurrency(lineSub)}
-                                          </td>
-                                          <td style={{ padding: '5px 2px', textAlign: 'center' }}>
-                                            <button
-                                              type="button"
-                                              className="draft-item-remove-btn"
-                                              onClick={() => handleRemoveItemFromDraft(item)}
-                                              title={`Remove ${item.name} from draft`}
-                                            >
-                                              ✕
-                                            </button>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-
-                              {/* Supplier Financial Subtotal */}
-                              <div style={{ background: 'var(--bg)', borderRadius: 6, padding: '8px 10px', fontSize: 11 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text2)', marginBottom: 2 }}>
-                                  <span>Subtotal ({group.items.length} SKUs):</span>
-                                  <span style={{ fontWeight: 700, color: 'var(--text)' }}>{formatCurrency(group.subtotal)}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text3)', fontSize: 10 }}>
-                                  <span>Tax &amp; Freight:</span>
-                                  <span>Included</span>
-                                </div>
-                              </div>
-
-                              {/* Supplier Individual Action Buttons */}
-                              <div style={{ display: 'flex', gap: 6 }}>
-                                <button
-                                  type="button"
-                                  className="po-discard"
-                                  onClick={() => handlePromptCancel(sup.id)}
-                                  style={{ flex: 1, padding: '6px 8px', fontSize: 11 }}
-                                  title={`Cancel draft for ${sup.name}`}
-                                >
-                                  Clear
-                                </button>
-                                <button
-                                  type="button"
-                                  className="po-save"
-                                  onClick={() => handlePromptSaveDraft(sup.id)}
-                                  disabled={isDispatching}
-                                  style={{ flex: 1, padding: '6px 8px', fontSize: 11 }}
-                                  title={`Save ${sup.name} draft to database`}
-                                >
-                                  Save Draft
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`po-approve ${!v.valid || isDispatching ? 'btn-dispatch-disabled' : ''}`}
-                                  onClick={() => handlePromptSubmitPO(sup.id)}
-                                  disabled={!v.valid || isDispatching}
-                                  style={{ flex: '1.4 1 0%', padding: '6px 8px', fontSize: 11 }}
-                                  title={!v.valid ? v.message : `Dispatch PO for ${sup.name}`}
-                                >
-                                  {isDispatching ? 'Dispatching...' : 'Dispatch PO →'}
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </aside>
-        )}
       </div>
 
       {/* ─── Pending Manifests Modal ────────────────────────────────────────── */}
-      {manifestsModalOpen && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="manifest-modal-title" onClick={() => setManifestsModalOpen(false)}>
-          <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-content info-modal-card">
-              <div className="modal-header info-modal-header">
-                <h2 id="manifest-modal-title" className="info-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
-                  <span>📦</span>
-                  <span>Pending Manifests — {currentSupplier.name}</span>
-                </h2>
-                <button className="info-modal-close modal-close-btn" onClick={() => setManifestsModalOpen(false)} aria-label="Close modal">✕</button>
-              </div>
-              <div className="modal-body info-modal-body">
-                {manifestsList.length === 0 ? (
-                  <div className="state-box" style={{ minHeight: 180 }}>
-                    <div className="state-icon">🚚</div>
-                    <h3 className="state-title">No Pending Manifests</h3>
-                    <p className="state-body">There are currently no inbound delivery manifests pending for {currentSupplier.name}.</p>
-                  </div>
-                ) : (
-                  <table className="modal-table">
-                    <thead>
-                      <tr>
-                        <th>Manifest #</th>
-                        <th>Expected Arrival</th>
-                        <th>Items</th>
-                        <th>Units</th>
-                        <th>Carrier</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {manifestsList.map((m) => (
-                        <tr key={m.id}>
-                          <td><strong>{m.manifestNumber}</strong></td>
-                          <td>{m.expectedDate}</td>
-                          <td>{m.itemsCount} SKUs</td>
-                          <td>{m.totalUnits}</td>
-                          <td>{m.carrier}</td>
-                          <td>
-                            <span className={`modal-badge ${m.status}`}>
-                              {m.status.replace('_', ' ')}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <PendingManifestsModal
+        isOpen={manifestsModalOpen}
+        onClose={() => setManifestsModalOpen(false)}
+        supplierName={currentSupplier?.name}
+        manifestsList={manifestsList}
+      />
 
       {/* ─── PO History Modal ──────────────────────────────────────────────── */}
-      {poHistoryModalOpen && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="pohist-modal-title" onClick={() => setPoHistoryModalOpen(false)}>
-          <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-content info-modal-card">
-              <div className="modal-header info-modal-header">
-                <h2 id="pohist-modal-title" className="info-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
-                  {SUPPLIER_LOGOS[currentSupplier.id] ? (
-                    <img src={SUPPLIER_LOGOS[currentSupplier.id]} alt="" style={{ width: 26, height: 26, objectFit: 'contain', borderRadius: 4, background: '#fff', border: '1px solid var(--border)', padding: 1 }} />
-                  ) : (
-                    <span>📑</span>
-                  )}
-                  <span>Purchase Order History — {currentSupplier.name}</span>
-                </h2>
-                <button className="info-modal-close modal-close-btn" onClick={() => setPoHistoryModalOpen(false)} aria-label="Close modal">✕</button>
-              </div>
-              <div className="modal-body info-modal-body">
-                {poHistoryList.length === 0 ? (
-                  <div className="state-box" style={{ minHeight: 180 }}>
-                    <div className="state-icon">📋</div>
-                    <h3 className="state-title">No Purchase Order History</h3>
-                    <p className="state-body">No previous purchase orders have been submitted for {currentSupplier.name}.</p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {poHistoryList.map((po) => (
-                      <div key={po.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--bg)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <strong style={{ fontSize: 13, color: 'var(--text)' }}>{po.poNumber}</strong>
-                            <span className={`modal-badge ${po.status}`}>{po.status}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand)' }}>{formatCurrency(po.totalAmount)}</span>
-                            <button
-                              onClick={() => handlePromptDeletePO(po)}
-                              title="Delete PO record"
-                              style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}
-                            >
-                              🗑
-                            </button>
-                          </div>
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>
-                          Created: {new Date(po.createdAt).toLocaleDateString()} &bull; {po.notes || 'Standard Order'}
-                        </div>
-                        {po.items && po.items.length > 0 && (
-                          <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                            {po.items.map((it) => (
-                              <span key={it.id} style={{ fontSize: 11, background: 'var(--surface)', padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)' }}>
-                                {it.name} ({it.quantity}x)
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <POHistoryModal
+        isOpen={poHistoryModalOpen}
+        onClose={() => setPoHistoryModalOpen(false)}
+        supplier={currentSupplier}
+        poHistoryList={poHistoryList}
+        onDeletePO={handlePromptDeletePO}
+        formatCurrency={formatCurrency}
+        logoSrc={SUPPLIER_LOGOS[currentSupplier?.id]}
+      />
 
       {/* ─── Supplier Contact Modal ────────────────────────────────────────── */}
-      {contactModalOpen && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="contact-modal-title" onClick={() => setContactModalOpen(false)}>
-          <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-md" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-content info-modal-card">
-              <div className="modal-header info-modal-header">
-                <h2 id="contact-modal-title" className="info-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: 0 }}>
-                  {SUPPLIER_LOGOS[currentSupplier.id] ? (
-                    <img src={SUPPLIER_LOGOS[currentSupplier.id]} alt="" style={{ width: 26, height: 26, objectFit: 'contain', borderRadius: 4, background: '#fff', border: '1px solid var(--border)', padding: 1 }} />
-                  ) : (
-                    <span>📞</span>
-                  )}
-                  <span>Contact Supplier — {currentSupplier.name}</span>
-                </h2>
-                <button className="info-modal-close modal-close-btn" onClick={() => setContactModalOpen(false)} aria-label="Close modal">✕</button>
-              </div>
-              <div className="modal-body info-modal-body">
-                <div className="contact-grid">
-                  <div className="contact-item">
-                    <div className="contact-label">Account Representative</div>
-                    <div className="contact-val">{contactData?.contactRep || 'Information unavailable'}</div>
-                  </div>
-                  <div className="contact-item">
-                    <div className="contact-label">Direct Email</div>
-                    <div className="contact-val">
-                      {contactData?.contactEmail ? (
-                        <a href={`mailto:${contactData.contactEmail}`}>{contactData.contactEmail}</a>
-                      ) : 'Information unavailable'}
-                    </div>
-                  </div>
-                  <div className="contact-item">
-                    <div className="contact-label">Phone Support</div>
-                    <div className="contact-val">
-                      {contactData?.contactPhone ? (
-                        <a href={`tel:${contactData.contactPhone}`}>{contactData.contactPhone}</a>
-                      ) : 'Information unavailable'}
-                    </div>
-                  </div>
-                  <div className="contact-item">
-                    <div className="contact-label">Standard Lead Time</div>
-                    <div className="contact-val">{contactData?.leadTime || currentSupplier.leadTime || 'Information unavailable'}</div>
-                  </div>
-                  <div className="contact-item" style={{ gridColumn: '1 / -1' }}>
-                    <div className="contact-label">Warehouse &amp; Dispatch Address</div>
-                    <div className="contact-val">{contactData?.contactAddress || 'Information unavailable'}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <SupplierContactModal
+        isOpen={contactModalOpen}
+        onClose={() => setContactModalOpen(false)}
+        supplier={currentSupplier}
+        contactData={contactData}
+        logoSrc={SUPPLIER_LOGOS[currentSupplier?.id]}
+      />
+
 
       {/* ─── Unified State-Changing Confirmation Modal (Cancel, Save, Submit, Delete) ─── */}
       <Modal
