@@ -262,15 +262,16 @@ export async function updateManifestStatus(manifestId, newStatus) {
 }
 
 // ── Purchase Orders & Line Items ───────────────────────────────────────────
-export async function fetchPOHistory(supplierId) {
+export async function fetchPOHistory(supplierId = null) {
+  const isFiltered = supplierId && supplierId !== 'all';
   const orders = await runQuery(`
     SELECT id, po_number as poNumber, supplier_id as supplierId,
            status, subtotal, tax, total_amount as totalAmount,
            notes, created_at as createdAt, updated_at as updatedAt
     FROM purchase_orders
-    WHERE supplier_id = ?
+    ${isFiltered ? 'WHERE supplier_id = ?' : ''}
     ORDER BY created_at DESC;
-  `, [supplierId]);
+  `, isFiltered ? [supplierId] : []);
 
   if (orders.length === 0) return [];
 

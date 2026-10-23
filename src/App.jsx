@@ -5,6 +5,7 @@ import { fetchAppSetting, saveAppSetting } from './db/queries.js';
 const ReplenishmentPage = lazy(() => import('./features/replenishment/ReplenishmentPage.jsx'));
 const ManifestsPage = lazy(() => import('./features/manifests/ManifestsPage.jsx'));
 const SuppliersPage = lazy(() => import('./features/suppliers/SuppliersPage.jsx'));
+const POHistoryPage = lazy(() => import('./features/history/POHistoryPage.jsx'));
 
 // Accessible, lightweight loading fallback
 function PageFallback() {
@@ -46,6 +47,8 @@ function PageFallback() {
 
 export default function App() {
   const [targetSupplierFilter, setTargetSupplierFilter] = useState(null);
+  const [draftToRestore, setDraftToRestore] = useState(null);
+  const [targetSupplierForHistory, setTargetSupplierForHistory] = useState(null);
 
   const [currentPage, setCurrentPage] = useState(() => {
     if (typeof window === 'undefined') return 'replenishment';
@@ -55,6 +58,9 @@ export default function App() {
     }
     if (params.get('page') === 'suppliers' || window.location.pathname.startsWith('/suppliers')) {
       return 'suppliers';
+    }
+    if (params.get('page') === 'history' || window.location.pathname.startsWith('/history')) {
+      return 'history';
     }
     return 'replenishment';
   });
@@ -128,6 +134,8 @@ export default function App() {
         setCurrentPage('manifests');
       } else if (params.get('page') === 'suppliers' || window.location.pathname.startsWith('/suppliers')) {
         setCurrentPage('suppliers');
+      } else if (params.get('page') === 'history' || window.location.pathname.startsWith('/history')) {
+        setCurrentPage('history');
       } else {
         setCurrentPage('replenishment');
       }
@@ -141,9 +149,16 @@ export default function App() {
     if (options.supplier) {
       setTargetSupplierFilter(options.supplier);
     }
+    if (options.supplierId) {
+      setTargetSupplierForHistory(options.supplierId);
+    }
+    if (options.restoreDraft) {
+      setDraftToRestore(options.restoreDraft);
+    }
     let targetUrl = '/';
     if (page === 'manifests') targetUrl = '/manifests';
     else if (page === 'suppliers') targetUrl = '/suppliers';
+    else if (page === 'history') targetUrl = '/history';
     window.history.pushState({ page, ...options }, '', targetUrl);
   };
 
@@ -165,13 +180,26 @@ export default function App() {
           onNavigateTo={(page, opts) => navigateTo(page, opts)}
         />
       )}
+      {currentPage === 'history' && (
+        <POHistoryPage
+          themePreference={themePreference}
+          onThemeChange={handleThemeChange}
+          initialSupplierId={targetSupplierForHistory}
+          onNavigateBack={() => navigateTo('replenishment')}
+          onNavigateTo={(page, opts) => navigateTo(page, opts)}
+          onViewDraft={(po) => navigateTo('replenishment', { restoreDraft: po })}
+        />
+      )}
       {currentPage === 'replenishment' && (
         <ReplenishmentPage
           themePreference={themePreference}
           onThemeChange={handleThemeChange}
           onNavigateToManifests={() => navigateTo('manifests')}
           onNavigateToSuppliers={() => navigateTo('suppliers')}
+          onNavigateToHistory={(opts) => navigateTo('history', opts)}
           initialSupplierFilter={targetSupplierFilter}
+          initialDraftToRestore={draftToRestore}
+          onClearDraftToRestore={() => setDraftToRestore(null)}
         />
       )}
     </Suspense>

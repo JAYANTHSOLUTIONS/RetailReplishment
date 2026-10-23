@@ -122,75 +122,45 @@ export default function OrderDraftPanel({
                         }
                       }}
                     >
-                      <div className="d-flex align-items-center gap-2" style={{ minWidth: 0 }}>
+                      <div className="draft-header-brand">
                         {supplierLogos[sup.id] ? (
                           <img
                             src={supplierLogos[sup.id]}
                             alt=""
-                            style={{
-                              width: 24,
-                              height: 24,
-                              borderRadius: 5,
-                              objectFit: 'contain',
-                              background: '#fff',
-                              border: '1px solid var(--border)',
-                              padding: 1,
-                            }}
+                            className="draft-supplier-logo"
                           />
                         ) : (
                           <div
-                            className="d-flex align-items-center justify-content-center"
+                            className="draft-supplier-avatar"
                             style={{
-                              width: 24,
-                              height: 24,
-                              borderRadius: 5,
                               background: sup.color || 'var(--brand)',
-                              color: '#fff',
-                              fontSize: 10,
-                              fontWeight: 700,
                             }}
                           >
                             {sup.initials || sup.name.slice(0, 2).toUpperCase()}
                           </div>
                         )}
-                        <div style={{ minWidth: 0 }}>
+                        <div className="draft-header-titles">
                           <div
-                            className="text-truncate fw-bold"
-                            style={{ fontSize: 13, color: 'var(--text)' }}
+                            className="draft-supplier-name"
+                            title={sup.name}
                           >
                             {sup.name}
                           </div>
-                          <div className="text-muted" style={{ fontSize: 11 }}>
+                          <div className="draft-supplier-meta">
                             {group.items.length} {group.items.length === 1 ? 'item' : 'items'} • {group.totalUnits} units • {formatCurrency(group.subtotal)}
                           </div>
                         </div>
                       </div>
 
-                      <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                      <div className="draft-header-controls">
                         <span
-                          style={{
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: '2px 7px',
-                            borderRadius: 10,
-                            background: v.valid ? 'rgba(16, 185, 129, 0.14)' : 'rgba(217, 119, 6, 0.14)',
-                            color: v.valid ? '#059669' : '#d97706',
-                            border: `1px solid ${v.valid ? 'rgba(16, 185, 129, 0.3)' : 'rgba(217, 119, 6, 0.3)'}`,
-                            whiteSpace: 'nowrap',
-                          }}
+                          className={`draft-moq-pill ${v.valid ? 'valid' : 'pending'}`}
                         >
                           {v.valid ? '✔ MOQ Met' : `⚠️ ${formatCurrency(v.remainingAmount)} left`}
                         </span>
                         <span
                           className={`draft-accordion-chevron ${isAccordionOpen ? 'rotated' : ''}`}
                           aria-hidden="true"
-                          style={{
-                            transition: 'transform 0.2s ease',
-                            transform: isAccordionOpen ? 'rotate(180deg)' : 'none',
-                            display: 'flex',
-                            alignItems: 'center',
-                            color: 'var(--text3)',
-                          }}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="6 9 12 15 18 9" />
@@ -342,33 +312,30 @@ export default function OrderDraftPanel({
                           </div>
                         </div>
 
-                        {/* Supplier Individual Action Buttons */}
-                        <div className="d-flex" style={{ gap: 6 }}>
+                        {/* Supplier Individual Action Buttons matching image */}
+                        <div className="draft-actions-container">
                           <button
                             type="button"
-                            className="po-discard"
+                            className="draft-btn-clear"
                             onClick={() => handlePromptCancel(sup.id)}
-                            style={{ flex: 1, padding: '6px 8px', fontSize: 11 }}
-                            title={`Cancel draft for ${sup.name}`}
+                            title={`Clear draft for ${sup.name}`}
                           >
                             Clear
                           </button>
                           <button
                             type="button"
-                            className="po-save"
+                            className="draft-btn-save"
                             onClick={() => handlePromptSaveDraft(sup.id)}
                             disabled={isDispatching}
-                            style={{ flex: 1, padding: '6px 8px', fontSize: 11 }}
                             title={`Save ${sup.name} draft to database`}
                           >
                             Save Draft
                           </button>
                           <button
                             type="button"
-                            className={`po-approve ${!v.valid || isDispatching ? 'btn-dispatch-disabled' : ''}`}
+                            className={`draft-btn-dispatch ${!v.valid || isDispatching ? 'disabled' : ''}`}
                             onClick={() => handlePromptSubmitPO(sup.id)}
                             disabled={!v.valid || isDispatching}
-                            style={{ flex: '1.4 1 0%', padding: '6px 8px', fontSize: 11 }}
                             title={!v.valid ? v.message : `Dispatch PO for ${sup.name}`}
                           >
                             {isDispatching ? 'Dispatching...' : 'Dispatch PO →'}

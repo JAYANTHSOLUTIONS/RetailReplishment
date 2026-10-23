@@ -7,6 +7,7 @@ export default function POHistoryModal({
   onClose,
   supplier,
   poHistoryList = [],
+  onViewDraft,
   onDeletePO,
   formatCurrency,
   logoSrc,
@@ -68,6 +69,25 @@ export default function POHistoryModal({
                   <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand)' }}>
                     {formatCurrency ? formatCurrency(po.totalAmount) : `$${po.totalAmount}`}
                   </span>
+                  {po.status === 'draft' && onViewDraft && (
+                    <button
+                      type="button"
+                      onClick={() => onViewDraft(po)}
+                      title={`Open draft ${po.poNumber} in draft queue`}
+                      style={{
+                        background: 'var(--brand)',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 4,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: '3px 8px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      View Draft
+                    </button>
+                  )}
                   {onDeletePO && (
                     <button
                       type="button"
@@ -141,6 +161,7 @@ POHistoryModal.propTypes = {
       items: PropTypes.array,
     })
   ),
+  onViewDraft: PropTypes.func,
   onDeletePO: PropTypes.func,
   formatCurrency: PropTypes.func,
   logoSrc: PropTypes.string,

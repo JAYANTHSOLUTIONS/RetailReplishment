@@ -53,7 +53,10 @@ const formatCurrency = (val) => `₹${Number(val || 0).toLocaleString('en-IN')}`
 export default function ReplenishmentPage({
   onNavigateToManifests,
   onNavigateToSuppliers,
+  onNavigateToHistory,
   initialSupplierFilter,
+  initialDraftToRestore,
+  onClearDraftToRestore,
   themePreference: propThemePreference,
   onThemeChange: propOnThemeChange,
 }) {
@@ -1246,36 +1249,74 @@ export default function ReplenishmentPage({
     });
   };
 
-  // Save Draft workflow with SQLite persistence
-  const handlePromptSaveDraft = (targetSupId = null) => {
+  // Save Draft workflow with immediate SQLite persistence and queue clearance
+  const handlePromptSaveDraft = async (targetSupId = null) => {
     const targetGroup = targetSupId ? selectedSupplierGroups.find((g) => g.supplier.id === targetSupId) : selectedSupplierGroups[0];
     if (!targetGroup) return;
 
-    setConfirmModalConfig({
-      title: `Save ${targetGroup.supplier.name} Draft?`,
-      message: `Save draft for ${targetGroup.supplier.name} with ${targetGroup.items.length} items totaling ${formatCurrency(targetGroup.subtotal)} to the SQLite database?`,
-      confirmText: 'Save Draft',
-      confirmClass: 'btn-primary-action',
-      onConfirm: async () => {
-        try {
-          await saveDraftPO({
-            supplierId: targetGroup.supplier.id,
-            items: targetGroup.items,
-            subtotal: targetGroup.subtotal,
-            tax: 0,
-            totalAmount: targetGroup.subtotal,
-            notes: `Draft updated on ${new Date().toLocaleDateString()}`,
-          });
-          setIsUnsaved(false);
-          setConfirmModalConfig(null);
-          showToast(`Draft for ${targetGroup.supplier.name} saved successfully.`);
-        } catch (err) {
-          showToast('Failed to save draft to database: ' + err.message, 'warn');
-        }
-      },
-      onCancel: () => setConfirmModalConfig(null),
-    });
+    try {
+      await saveDraftPO({
+        supplierId: targetGroup.supplier.id,
+        items: targetGroup.items,
+        subtotal: targetGroup.subtotal,
+        tax: 0,
+        totalAmount: targetGroup.subtotal,
+        notes: `Draft saved on ${new Date().toLocaleDateString()}`,
+      });
+      setIsUnsaved(false);
+
+      // Close and clear that supplier's products from the draft queue
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (targetGroup.items.some((sel) => sel.id === p.id || sel.sku === p.sku)) {
+            return { ...p, selected: false, orderQty: 0 };
+          }
+          return p;
+        })
+      );
+
+      const remainingGroups = selectedSupplierGroups.filter((g) => g.supplier.id !== targetGroup.supplier.id);
+      if (remainingGroups.length === 0) {
+        setDraftExpanded(false);
+      }
+
+      // Refresh purchase order history for this supplier
+      const updatedHistory = await fetchPOHistory(targetGroup.supplier.id);
+      setPoHistoryList(updatedHistory);
+
+      showToast(`Draft for ${targetGroup.supplier.name} saved to PO History.`);
+    } catch (err) {
+      showToast('Failed to save draft to database: ' + err.message, 'warn');
+    }
   };
+
+  // Restore draft from PO History into the draft queue
+  const handleRestoreDraftToQueue = useCallback((po) => {
+    if (!po || !po.items || po.items.length === 0) {
+      showToast('Draft has no line items to open.', 'warn');
+      return;
+    }
+
+    setProducts((prev) =>
+      prev.map((p) => {
+        const matchingItem = po.items.find(
+          (it) => (it.productId && it.productId === p.id) || (it.sku && it.sku === p.sku)
+        );
+        if (matchingItem) {
+          return { ...p, selected: true, orderQty: matchingItem.quantity };
+        }
+        return p;
+      })
+    );
+
+    if (po.supplierId) {
+      setSelectedSupplierId(po.supplierId);
+      setExpandedDraftSupplierIds((prev) => new Set([...prev, po.supplierId]));
+    }
+    setDraftExpanded(true);
+    setPoHistoryModalOpen(false);
+    showToast(`Draft ${po.poNumber} opened in draft queue.`);
+  }, []);
 
   // Submit & Dispatch PO workflow with SQLite persistence, validation, and multi-supplier queue preservation
   const handlePromptSubmitPO = (targetSupId = null) => {
@@ -1471,7 +1512,21 @@ export default function ReplenishmentPage({
     }
   };
 
+  useEffect(() => {
+    if (initialDraftToRestore) {
+      const timer = setTimeout(() => {
+        handleRestoreDraftToQueue(initialDraftToRestore);
+        if (onClearDraftToRestore) onClearDraftToRestore();
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [initialDraftToRestore, handleRestoreDraftToQueue, onClearDraftToRestore]);
+
   const handleOpenPOHistory = async () => {
+    if (onNavigateToHistory) {
+      onNavigateToHistory({ supplierId: selectedSupplierId });
+      return;
+    }
     try {
       const data = await fetchPOHistory(selectedSupplierId);
       setPoHistoryList(data || []);
@@ -1509,6 +1564,7 @@ export default function ReplenishmentPage({
         mainLogo={mainLogo}
         onNavigateToManifests={onNavigateToManifests}
         onNavigateToSuppliers={onNavigateToSuppliers}
+        onNavigateToHistory={onNavigateToHistory}
         suppliers={suppliers}
         activeQueueSupplierId={activeQueueSupplierId}
         setActiveQueueSupplierId={setActiveQueueSupplierId}
@@ -1548,7 +1604,7 @@ export default function ReplenishmentPage({
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="1" y="3" width="15" height="13" />
-                <polygon points="16 8 20 8 23 11 23 16 16 16 8" />
+                <polygon points="16 8 20 8 23 11 23 16 16 8" />
                 <circle cx="5.5" cy="18.5" r="2.5" />
                 <circle cx="18.5" cy="18.5" r="2.5" />
               </svg>
@@ -1563,6 +1619,20 @@ export default function ReplenishmentPage({
                 <circle cx="9" cy="7" r="4" />
                 <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            </button>
+            <button
+              className="icon-nav-btn"
+              title="Purchase Order History"
+              onClick={() => {
+                if (onNavigateToHistory) onNavigateToHistory();
+                else handleOpenPOHistory();
+              }}
+              aria-label="Purchase Order History"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 8v4l3 3" />
+                <circle cx="12" cy="12" r="9" />
               </svg>
             </button>
             <button className="icon-nav-btn" title="Analytics">
@@ -2293,6 +2363,7 @@ export default function ReplenishmentPage({
         onClose={() => setPoHistoryModalOpen(false)}
         supplier={currentSupplier}
         poHistoryList={poHistoryList}
+        onViewDraft={handleRestoreDraftToQueue}
         onDeletePO={handlePromptDeletePO}
         formatCurrency={formatCurrency}
         logoSrc={SUPPLIER_LOGOS[currentSupplier?.id]}
