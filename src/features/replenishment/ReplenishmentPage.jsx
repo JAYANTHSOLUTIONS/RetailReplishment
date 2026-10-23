@@ -131,24 +131,33 @@ export default function ReplenishmentPage({
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [saveAllError, setSaveAllError] = useState(null);
 
-  // Column-level dropdown filters (Supplier, Category, Status, Subtotal)
+  // Column-level dropdown filters & sort (Supplier, Category, Status, Subtotal)
   const [colFilters, setColFilters] = useState({
-    supplierId: '',
-    category: '',
-    status: '',
+    supplierIds: [],
+    categories: [],
+    statuses: [],
     subtotalSort: '',
+    sortColumn: null,
+    sortDirection: null,
   });
 
   const activeColFilterCount = useMemo(() => {
-    return Object.values(colFilters).filter((v) => Boolean(v && String(v).trim())).length;
+    let count = 0;
+    if (colFilters.supplierIds && colFilters.supplierIds.length > 0) count++;
+    if (colFilters.categories && colFilters.categories.length > 0) count++;
+    if (colFilters.statuses && colFilters.statuses.length > 0) count++;
+    if (colFilters.subtotalSort || colFilters.sortColumn) count++;
+    return count;
   }, [colFilters]);
 
   const handleClearColFilters = () => {
     setColFilters({
-      supplierId: '',
-      category: '',
-      status: '',
+      supplierIds: [],
+      categories: [],
+      statuses: [],
       subtotalSort: '',
+      sortColumn: null,
+      sortDirection: null,
     });
   };
 
@@ -245,8 +254,6 @@ export default function ReplenishmentPage({
   const searchInputRef = useRef(null);
   const tableRef = useRef(null);
   const tblWrapRef = useRef(null);
-  const [tableScrollTop, setTableScrollTop] = useState(0);
-  const [tableViewportHeight, setTableViewportHeight] = useState(600);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -452,16 +459,20 @@ export default function ReplenishmentPage({
         return false;
       }
 
-      // 4. Desktop column-level filters (Supplier, Category, Status)
-      if (colFilters.supplierId && p.supplierId !== colFilters.supplierId) {
-        return false;
+      // 4. Desktop column-level filters (Supplier, Category, Status) - multi-value array checks
+      if (colFilters.supplierIds && colFilters.supplierIds.length > 0) {
+        if (!colFilters.supplierIds.includes(p.supplierId)) {
+          return false;
+        }
       }
-      if (colFilters.category && p.category !== colFilters.category) {
-        return false;
+      if (colFilters.categories && colFilters.categories.length > 0) {
+        if (!colFilters.categories.includes(p.category)) {
+          return false;
+        }
       }
-      if (colFilters.status) {
+      if (colFilters.statuses && colFilters.statuses.length > 0) {
         const pStatus = p.priority || p.status;
-        if (pStatus !== colFilters.status) {
+        if (!colFilters.statuses.includes(pStatus)) {
           return false;
         }
       }
@@ -470,9 +481,40 @@ export default function ReplenishmentPage({
     });
   }, [products, appliedFilters, deferredSearchTerm, activeQueueSupplierId, suppliersMap, colFilters]);
 
-  // Display ordering: Subtotal (high to low / low to high) or default ascending Product ID
+  // Display ordering: Column Sort (Supplier, Category, Status, Name) or Subtotal (high to low / low to high) or default ascending Product ID
   const displayProducts = useMemo(() => {
     const list = [...filteredProducts];
+    if (colFilters.sortColumn) {
+      const dir = colFilters.sortDirection === 'desc' ? -1 : 1;
+      if (colFilters.sortColumn === 'supplier') {
+        return list.sort((a, b) => {
+          const nameA = suppliersMap[a.supplierId]?.name || '';
+          const nameB = suppliersMap[b.supplierId]?.name || '';
+          return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' }) * dir;
+        });
+      }
+      if (colFilters.sortColumn === 'category') {
+        return list.sort((a, b) => {
+          const catA = a.category || '';
+          const catB = b.category || '';
+          return catA.localeCompare(catB, undefined, { sensitivity: 'base' }) * dir;
+        });
+      }
+      if (colFilters.sortColumn === 'status') {
+        return list.sort((a, b) => {
+          const stA = a.priority || a.status || '';
+          const stB = b.priority || b.status || '';
+          return stA.localeCompare(stB, undefined, { sensitivity: 'base' }) * dir;
+        });
+      }
+      if (colFilters.sortColumn === 'name') {
+        return list.sort((a, b) => {
+          const nA = a.name || '';
+          const nB = b.name || '';
+          return nA.localeCompare(nB, undefined, { sensitivity: 'base' }) * dir;
+        });
+      }
+    }
     if (colFilters.subtotalSort === 'high') {
       return list.sort((a, b) => {
         const qtyA = Number(pendingQtyEdits[a.sku] !== undefined ? pendingQtyEdits[a.sku] : a.orderQty) || 0;
@@ -488,7 +530,7 @@ export default function ReplenishmentPage({
       });
     }
     return list.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' }));
-  }, [filteredProducts, colFilters.subtotalSort, pendingQtyEdits]);
+  }, [filteredProducts, colFilters.sortColumn, colFilters.sortDirection, colFilters.subtotalSort, pendingQtyEdits, suppliersMap]);
 
   // Derived effective application states (supporting ?state=loading | ?state=empty | ?state=error)
   const isEffectiveLoading = urlStateParam === 'loading' || isLoading;
@@ -546,38 +588,10 @@ export default function ReplenishmentPage({
     return displayProducts.slice(startIndex, endIndex);
   }, [displayProducts, startIndex, endIndex]);
 
-  // ── Virtualization Calculation (Group C - Windowing) ────────────────────────
-  const ROW_HEIGHT = 42; // px per desktop table row
-  const OVERSCAN = 6;    // buffer rows above and below visible viewport
-
-  const isVirtualized = paginatedProducts.length > 15;
-  const totalPageRows = paginatedProducts.length;
-
-  const { virtualStartIndex, virtualEndIndex, topSpacerHeight, bottomSpacerHeight } = useMemo(() => {
-    if (!isVirtualized) {
-      return {
-        virtualStartIndex: 0,
-        virtualEndIndex: totalPageRows,
-        topSpacerHeight: 0,
-        bottomSpacerHeight: 0,
-      };
-    }
-    const start = Math.max(0, Math.floor(tableScrollTop / ROW_HEIGHT) - OVERSCAN);
-    const visibleCount = Math.ceil(tableViewportHeight / ROW_HEIGHT);
-    const end = Math.min(totalPageRows, start + visibleCount + OVERSCAN * 2);
-
-    return {
-      virtualStartIndex: start,
-      virtualEndIndex: end,
-      topSpacerHeight: start * ROW_HEIGHT,
-      bottomSpacerHeight: Math.max(0, (totalPageRows - end) * ROW_HEIGHT),
-    };
-  }, [isVirtualized, totalPageRows, tableScrollTop, tableViewportHeight]);
-
-  const visibleProducts = useMemo(() => {
-    if (!isVirtualized) return paginatedProducts;
-    return paginatedProducts.slice(virtualStartIndex, virtualEndIndex);
-  }, [isVirtualized, paginatedProducts, virtualStartIndex, virtualEndIndex]);
+  // Group C - Pagination renders all active page items (10, 25, or 50) cleanly without 27-row cutoff
+  const topSpacerHeight = 0;
+  const bottomSpacerHeight = 0;
+  const visibleProducts = paginatedProducts;
 
   // Stable row interaction callbacks for MemoizedProductRow
   const handleRowHover = useCallback((pageIdx) => {
@@ -1398,40 +1412,10 @@ export default function ReplenishmentPage({
   });
 
 
-  // ── Virtualization scroll listener on .tbl-wrap (Group C - Windowing) ──────
-  useEffect(() => {
-    const el = tblWrapRef.current;
-    if (!el) return;
-
-    let rAF = null;
-    const handleScroll = () => {
-      if (rAF) cancelAnimationFrame(rAF);
-      rAF = requestAnimationFrame(() => {
-        setTableScrollTop(el.scrollTop);
-      });
-    };
-
-    const updateHeight = () => {
-      if (el.clientHeight > 0) {
-        setTableViewportHeight(el.clientHeight);
-      }
-    };
-
-    updateHeight();
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', updateHeight, { passive: true });
-    return () => {
-      if (rAF) cancelAnimationFrame(rAF);
-      el.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', updateHeight);
-    };
-  }, []);
-
   // Reset table scroll position when page or page size changes
   useEffect(() => {
     if (tblWrapRef.current) {
       tblWrapRef.current.scrollTop = 0;
-      setTableScrollTop(0);
     }
   }, [currentPage, pageSize]);
 
@@ -1724,7 +1708,7 @@ export default function ReplenishmentPage({
                 )}
               </div>
 
-              {/* Filter Bar with Filter Button Aligned to Right & Integrated X Clear Button */}
+              {/* Filter & Action Bar: Showing text on left, Actions and Filter logo on right */}
               <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <div className="filter-left" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   {activeQueueSupplierId && (
@@ -1760,17 +1744,92 @@ export default function ReplenishmentPage({
                   </span>
                 </div>
 
-                <div className="filter-right" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="filter-right" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {/* Select All / Deselect All Button */}
+                  {selectedProducts.length > 0 && (
+                    <button
+                      type="button"
+                      className={`btn-toolbar-select-all ${isAllFilteredSelected ? 'active' : ''}`}
+                      onClick={isAllFilteredSelected ? handleClearAllSelections : handleSelectAllFiltered}
+                      title={isAllFilteredSelected ? 'Deselect all products' : 'Select all products'}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isAllFilteredSelected}
+                        readOnly
+                        style={{ pointerEvents: 'none' }}
+                      />
+                      <span>{isAllFilteredSelected ? 'Deselect All' : `Select All (${eligibleFilteredProducts.length})`}</span>
+                    </button>
+                  )}
+
+                  {/* Cancel Selection Button */}
+                  {selectedProducts.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn-bulk-cancel"
+                      onClick={handleClearAllSelections}
+                      title="Cancel selection"
+                    >
+                      Cancel Selection
+                    </button>
+                  )}
+
+                  {/* Save All button when pending quantity edits exist */}
+                  {Object.keys(pendingQtyEdits).length > 0 && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <button
+                        type="button"
+                        className="btn-save-all"
+                        onClick={handleConfirmSaveAll}
+                        disabled={isSavingAll}
+                        title={`Save ${Object.keys(pendingQtyEdits).length} pending quantity changes`}
+                        aria-label="Save All Pending Changes"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                          <polyline points="17 21 17 13 7 13 7 21" />
+                          <polyline points="7 3 7 8 15 8" />
+                        </svg>
+                        <span>{isSavingAll ? 'Saving...' : `Save All (${Object.keys(pendingQtyEdits).length})`}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-discard-all"
+                        onClick={handleDiscardAllPending}
+                        title="Discard all pending quantity edits"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+
+                  {selectedProducts.length === 0 && Object.keys(pendingQtyEdits).length === 0 && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={handleApplySupplierMinimums}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        </svg>
+                        <span>Apply Supplier Minimums</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Filter logo button - no text filter, just the filter logo, count badge, and clear x */}
                   <button
                     type="button"
                     className={`btn-filter-modal ${hasActiveFilters ? 'active' : ''}`}
                     onClick={() => setFilterModalOpen(true)}
                     aria-label="Open filter modal"
+                    title="Filter products"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
                     </svg>
-                    <span>Filter</span>
                     {activeFilterCount > 0 && (
                       <span className="filter-count-badge">{activeFilterCount}</span>
                     )}
@@ -1802,92 +1861,6 @@ export default function ReplenishmentPage({
                   </button>
                 </div>
               </div>
-
-              {/* Toolbar & Bulk Action Bar */}
-              {isEffectiveHasResults && (
-                <>
-                  <div className="toolbar">
-                    <div className="toolbar-selection-group">
-                      {selectedProducts.length > 0 && (
-                        <button
-                          type="button"
-                          className={`btn-toolbar-select-all ${isAllFilteredSelected ? 'active' : ''}`}
-                          onClick={isAllFilteredSelected ? handleClearAllSelections : handleSelectAllFiltered}
-                          title={isAllFilteredSelected ? 'Deselect all products' : 'Select all products'}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isAllFilteredSelected}
-                            readOnly
-                            style={{ pointerEvents: 'none' }}
-                          />
-                          <span>{isAllFilteredSelected ? 'Deselect All' : `Select All (${eligibleFilteredProducts.length})`}</span>
-                        </button>
-                      )}
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                      {/* Save All button when pending quantity edits exist - saves directly to SQLite without confirmation modal */}
-                      {Object.keys(pendingQtyEdits).length > 0 && (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          <button
-                            type="button"
-                            className="btn-save-all"
-                            onClick={handleConfirmSaveAll}
-                            disabled={isSavingAll}
-                            title={`Save ${Object.keys(pendingQtyEdits).length} pending quantity changes`}
-                            aria-label="Save All Pending Changes"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                              <polyline points="17 21 17 13 7 13 7 21" />
-                              <polyline points="7 3 7 8 15 8" />
-                            </svg>
-                            <span>{isSavingAll ? 'Saving...' : `Save All (${Object.keys(pendingQtyEdits).length})`}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-discard-all"
-                            onClick={handleDiscardAllPending}
-                            title="Discard all pending quantity edits"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Cancel selection button */}
-                      {selectedProducts.length > 0 && (
-                        <button
-                          type="button"
-                          className="btn-bulk-cancel"
-                          onClick={handleClearAllSelections}
-                          title="Cancel selection"
-                        >
-                          Cancel Selection
-                        </button>
-                      )}
-
-                      {selectedProducts.length === 0 && Object.keys(pendingQtyEdits).length === 0 && (
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={handleApplySupplierMinimums}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                            </svg>
-                            <span>Apply Supplier Minimums</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  
-                </>
-              )}
 
               {/* Genuine Application States */}
               {isEffectiveLoading && (
@@ -2004,7 +1977,30 @@ export default function ReplenishmentPage({
                         </th>
                         <th className="col-id">Product ID</th>
                         <th className="col-sku">SKU</th>
-                        <th className="col-name">Product Name</th>
+                        <th className="col-name">
+                          <ColumnFilterDropdown
+                            title="Product Name"
+                            options={[]}
+                            currentSort={colFilters.sortColumn === 'name' ? colFilters.sortDirection : null}
+                            sortOptions={[
+                              { key: 'asc', label: 'Sort A to Z' },
+                              { key: 'desc', label: 'Sort Z to A' },
+                            ]}
+                            onApply={({ sort }) => {
+                              setColFilters((prev) => ({
+                                ...prev,
+                                sortColumn: sort ? 'name' : (prev.sortColumn === 'name' ? null : prev.sortColumn),
+                                sortDirection: sort || (prev.sortColumn === 'name' ? null : prev.sortDirection),
+                                subtotalSort: sort ? '' : prev.subtotalSort,
+                              }));
+                            }}
+                            onClear={() => setColFilters((prev) => ({
+                              ...prev,
+                              sortColumn: prev.sortColumn === 'name' ? null : prev.sortColumn,
+                              sortDirection: prev.sortColumn === 'name' ? null : prev.sortDirection,
+                            }))}
+                          />
+                        </th>
                         <th className="col-sup">
                           <ColumnFilterDropdown
                             title="Supplier"
@@ -2013,14 +2009,23 @@ export default function ReplenishmentPage({
                               label: s.name,
                               count: products.filter((p) => p.supplierId === s.id).length,
                             }))}
-                            selectedValues={colFilters.supplierId ? [colFilters.supplierId] : []}
-                            onApply={({ selectedValues }) => {
+                            selectedValues={colFilters.supplierIds}
+                            currentSort={colFilters.sortColumn === 'supplier' ? colFilters.sortDirection : null}
+                            onApply={({ selectedValues, sort }) => {
                               setColFilters((prev) => ({
                                 ...prev,
-                                supplierId: selectedValues.length > 0 ? selectedValues[0] : '',
+                                supplierIds: selectedValues,
+                                sortColumn: sort ? 'supplier' : (prev.sortColumn === 'supplier' ? null : prev.sortColumn),
+                                sortDirection: sort || (prev.sortColumn === 'supplier' ? null : prev.sortDirection),
+                                subtotalSort: sort ? '' : prev.subtotalSort,
                               }));
                             }}
-                            onClear={() => setColFilters((prev) => ({ ...prev, supplierId: '' }))}
+                            onClear={() => setColFilters((prev) => ({
+                              ...prev,
+                              supplierIds: [],
+                              sortColumn: prev.sortColumn === 'supplier' ? null : prev.sortColumn,
+                              sortDirection: prev.sortColumn === 'supplier' ? null : prev.sortDirection,
+                            }))}
                           />
                         </th>
                         <th className="col-cat">
@@ -2034,14 +2039,23 @@ export default function ReplenishmentPage({
                                 count: products.filter((p) => p.category === catName).length,
                               };
                             })}
-                            selectedValues={colFilters.category ? [colFilters.category] : []}
-                            onApply={({ selectedValues }) => {
+                            selectedValues={colFilters.categories}
+                            currentSort={colFilters.sortColumn === 'category' ? colFilters.sortDirection : null}
+                            onApply={({ selectedValues, sort }) => {
                               setColFilters((prev) => ({
                                 ...prev,
-                                category: selectedValues.length > 0 ? selectedValues[0] : '',
+                                categories: selectedValues,
+                                sortColumn: sort ? 'category' : (prev.sortColumn === 'category' ? null : prev.sortColumn),
+                                sortDirection: sort || (prev.sortColumn === 'category' ? null : prev.sortDirection),
+                                subtotalSort: sort ? '' : prev.subtotalSort,
                               }));
                             }}
-                            onClear={() => setColFilters((prev) => ({ ...prev, category: '' }))}
+                            onClear={() => setColFilters((prev) => ({
+                              ...prev,
+                              categories: [],
+                              sortColumn: prev.sortColumn === 'category' ? null : prev.sortColumn,
+                              sortDirection: prev.sortColumn === 'category' ? null : prev.sortDirection,
+                            }))}
                           />
                         </th>
                         <th className="col-stk num">Stock</th>
@@ -2055,14 +2069,23 @@ export default function ReplenishmentPage({
                               { value: 'healthy', label: 'Healthy', count: products.filter((p) => (p.priority || p.status) === 'healthy').length },
                               { value: 'excess', label: 'Excess', count: products.filter((p) => (p.priority || p.status) === 'excess').length },
                             ]}
-                            selectedValues={colFilters.status ? [colFilters.status] : []}
-                            onApply={({ selectedValues }) => {
+                            selectedValues={colFilters.statuses}
+                            currentSort={colFilters.sortColumn === 'status' ? colFilters.sortDirection : null}
+                            onApply={({ selectedValues, sort }) => {
                               setColFilters((prev) => ({
                                 ...prev,
-                                status: selectedValues.length > 0 ? selectedValues[0] : '',
+                                statuses: selectedValues,
+                                sortColumn: sort ? 'status' : (prev.sortColumn === 'status' ? null : prev.sortColumn),
+                                sortDirection: sort || (prev.sortColumn === 'status' ? null : prev.sortDirection),
+                                subtotalSort: sort ? '' : prev.subtotalSort,
                               }));
                             }}
-                            onClear={() => setColFilters((prev) => ({ ...prev, status: '' }))}
+                            onClear={() => setColFilters((prev) => ({
+                              ...prev,
+                              statuses: [],
+                              sortColumn: prev.sortColumn === 'status' ? null : prev.sortColumn,
+                              sortDirection: prev.sortColumn === 'status' ? null : prev.sortDirection,
+                            }))}
                           />
                         </th>
                         <th className="col-qty">Order Qty</th>
@@ -2080,6 +2103,8 @@ export default function ReplenishmentPage({
                               setColFilters((prev) => ({
                                 ...prev,
                                 subtotalSort: sort || '',
+                                sortColumn: sort ? null : prev.sortColumn,
+                                sortDirection: sort ? null : prev.sortDirection,
                               }));
                             }}
                             onClear={() => setColFilters((prev) => ({ ...prev, subtotalSort: '' }))}
@@ -2098,7 +2123,7 @@ export default function ReplenishmentPage({
                         </tr>
                       )}
                       {visibleProducts.map((prod, index) => {
-                        const pageIdx = isVirtualized ? virtualStartIndex + index : index;
+                        const pageIdx = index;
                         const isOrdered = prod.orderStatus === 'ordered';
                         const hasPendingEdit = pendingQtyEdits[prod.sku] !== undefined;
                         const pendingVal = pendingQtyEdits[prod.sku];

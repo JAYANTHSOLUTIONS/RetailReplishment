@@ -186,13 +186,15 @@ export default function ColumnFilterDropdown({
                     const isChecked = draftSelected.includes(opt.value);
                     return (
                       <label key={opt.value} className="col-filter-option-item">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => handleToggleOption(opt.value)}
-                          className="col-filter-cb"
-                        />
-                        <span className="col-filter-option-label">{opt.label}</span>
+                        <div className="col-filter-option-left">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleToggleOption(opt.value)}
+                            className="col-filter-cb"
+                          />
+                          <span className="col-filter-option-label">{opt.label}</span>
+                        </div>
                         {opt.count !== undefined && (
                           <span className="col-filter-option-count">({opt.count})</span>
                         )}
