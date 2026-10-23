@@ -1,8 +1,5 @@
 // src/components/ui/Select.jsx
 // Accessible <select> wrapper with label and error state.
-
-import React from 'react';
-
 export default function Select({ id, label, value, onChange, options = [], error, ...rest }) {
   return (
     <div className="ui-select-wrapper">

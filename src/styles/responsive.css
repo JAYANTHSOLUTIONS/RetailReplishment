@@ -2,13 +2,13 @@
    Responsive breakpoint helpers and layout rules.
 */
 
-/* Breakpoint reference (use in JS as needed):
-   xs:  < 480px
-   sm:  480px
-   md:  768px
-   lg:  1024px
-   xl:  1280px
-   2xl: 1536px
+/* Bootstrap 5 Breakpoint Reference:
+   xs:  < 576px (portrait mobile, 320px - 575px)
+   sm:  >= 576px (landscape mobile / phablets, 576px - 767px)
+   md:  >= 768px (tablets, 768px - 991px)
+   lg:  >= 992px (laptops & compact desktops, 992px - 1199px)
+   xl:  >= 1200px (standard desktops, 1200px - 1399px)
+   xxl: >= 1400px (wide desktops, >= 1400px)
 */
 
 /* Full-bleed on small screens */

@@ -1,7 +1,7 @@
 // src/components/ui/Dialog.jsx
 // Modal dialog with focus-trap and accessible overlay.
 
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 export default function Dialog({ open, title, onClose, children }) {
   const dialogRef = useRef(null);

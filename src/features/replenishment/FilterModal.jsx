@@ -1,7 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { matchesFilters } from '../../utils';
-import { SUPPLIER_LOGOS } from './ReplenishmentPage.jsx';
-export { matchesFilters };
+import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
 
 export default function FilterModal({
   isOpen,
@@ -14,6 +13,7 @@ export default function FilterModal({
   suppliers = [],
   categories = [],
 }) {
+  const modalRef = useRef(null);
   const activeFilters = appliedFilters || currentFilters || {};
   const productList = products && products.length > 0 ? products : allProducts;
 
@@ -21,33 +21,28 @@ export default function FilterModal({
     statuses: activeFilters.statuses ? [...activeFilters.statuses] : [],
     suppliers: activeFilters.suppliers ? [...activeFilters.suppliers] : [],
     categories: activeFilters.categories ? [...activeFilters.categories] : [],
-    stockLevels: activeFilters.stockLevels ? [...activeFilters.stockLevels] : [],
     search: activeFilters.search || '',
   }));
 
-  const [prevOpen, setPrevOpen] = useState(isOpen);
-
-  // Synchronize pending state when modal opens without cascading effect
-  if (isOpen !== prevOpen) {
-    setPrevOpen(isOpen);
+  // Synchronize pending state when modal opens without cascading double render
+  useEffect(() => {
     if (isOpen) {
       setPending({
         statuses: activeFilters.statuses ? [...activeFilters.statuses] : [],
         suppliers: activeFilters.suppliers ? [...activeFilters.suppliers] : [],
         categories: activeFilters.categories ? [...activeFilters.categories] : [],
-        stockLevels: activeFilters.stockLevels ? [...activeFilters.stockLevels] : [],
         search: activeFilters.search || '',
       });
+    } else if (modalRef.current && modalRef.current.contains(document.activeElement)) {
+      document.activeElement?.blur();
     }
-  }
+  }, [isOpen]);
 
-  // Dynamic live matching result count based on current pending selections
+  // Dynamic live matching result count based on current pending selections (guarded against filtering when closed)
   const matchingCount = useMemo(() => {
-    if (!productList || productList.length === 0) return 0;
+    if (!isOpen || !productList || productList.length === 0) return 0;
     return productList.filter((p) => matchesFilters(p, pending)).length;
-  }, [productList, pending]);
-
-  if (!isOpen) return null;
+  }, [isOpen, productList, pending]);
 
   const toggleArrayItem = (key, val) => {
     setPending((prev) => {
@@ -62,42 +57,51 @@ export default function FilterModal({
       statuses: [],
       suppliers: [],
       categories: [],
-      stockLevels: [],
       search: '',
     });
   };
 
+  const handleClose = () => {
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    onClose();
+  };
+
   const handleApply = () => {
     onApply(pending);
-    onClose();
+    handleClose();
   };
 
   return (
     <div
-      className="confirm-modal-overlay"
+      ref={modalRef}
+      className={`modal-overlay fade-toggle ${isOpen ? 'open' : ''}`}
       role="dialog"
       aria-modal="true"
+      inert={!isOpen ? true : undefined}
       aria-labelledby="filter-modal-title"
-      onClick={onClose}
+      onClick={handleClose}
     >
-      <div className="filter-modal-card" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="info-modal-header">
-          <div className="filter-modal-title-wrap">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-            </svg>
-            <h2 id="filter-modal-title" className="info-modal-title">
-              Filter Replenishment Inventory
-            </h2>
+      <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-content filter-modal-card">
+          {/* Header */}
+          <div className="modal-header info-modal-header">
+            <div className="modal-title filter-modal-title-wrap">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+              </svg>
+              <h2 id="filter-modal-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
+                Filter Replenishment Inventory
+              </h2>
+            </div>
+            {/* <button className="modal-close-btn info-modal-close" onClick={onClose} aria-label="Close modal">
+              ✕
+            </button> */}
           </div>
-          <button className="info-modal-close" onClick={onClose} aria-label="Close modal">
-            ✕
-          </button>
-        </div>
 
-        {/* Modal Body */}
-        <div className="filter-modal-body">
+          {/* Modal Body */}
+          <div className="modal-body filter-modal-body">
           {/* Search Input */}
           <div className="filter-search-row">
             <label htmlFor="filter-modal-search" className="filter-section-title">
@@ -154,28 +158,6 @@ export default function FilterModal({
               </div>
             </div>
 
-            {/* Stock Level Group */}
-            <div className="filter-group">
-              <div className="filter-section-title">Stock Level</div>
-              <div className="filter-options-list">
-                {[
-                  { key: 'below', label: 'Below safety target' },
-                  { key: 'at', label: 'At safety target' },
-                  { key: 'above', label: 'Above safety target' },
-                ].map((lvl) => (
-                  <label key={lvl.key} className="filter-checkbox-label">
-                    <input
-                      type="checkbox"
-                      className="cb"
-                      checked={pending.stockLevels.includes(lvl.key)}
-                      onChange={() => toggleArrayItem('stockLevels', lvl.key)}
-                    />
-                    <span className="filter-chip-label">{lvl.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
             {/* Supplier Group */}
             <div className="filter-group">
               <div className="filter-section-title">Suppliers ({suppliers.length})</div>
@@ -192,6 +174,7 @@ export default function FilterModal({
                       <img
                         src={SUPPLIER_LOGOS[sup.id]}
                         alt=""
+                        decoding="async"
                         style={{ width: 18, height: 18, objectFit: 'contain', borderRadius: 3, border: '1px solid #cbd5e1', background: '#fff', padding: 1, flexShrink: 0 }}
                       />
                     )}
@@ -222,12 +205,12 @@ export default function FilterModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="filter-modal-footer">
+        <div className="modal-footer filter-modal-footer">
           <button type="button" className="btn-cancel" onClick={handleClearAll}>
             Clear all
           </button>
           <div className="filter-modal-footer-right">
-            <button type="button" className="btn-cancel" onClick={onClose}>
+            <button type="button" className="btn-cancel" onClick={handleClose}>
               Cancel
             </button>
             <button
@@ -242,5 +225,6 @@ export default function FilterModal({
         </div>
       </div>
     </div>
+  </div>
   );
 }

@@ -1,8 +1,5 @@
 // src/components/layout/Header.jsx
 // Application header: logo, app title, and primary navigation links.
-
-import React from 'react';
-
 export default function Header() {
   return (
     <header className="layout-header">

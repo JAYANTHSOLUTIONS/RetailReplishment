@@ -3,8 +3,7 @@
 // Uses @testing-library/react – install: npm i -D @testing-library/react @testing-library/user-event vitest jsdom
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within }               from '@testing-library/react';
-import userEvent                                 from '@testing-library/user-event';
+import { render, screen }         from '@testing-library/react';
 import ReplenishmentPage                         from '../../features/replenishment/ReplenishmentPage';
 
 // Mock the services so tests don't hit a real server

@@ -35,23 +35,7 @@ export function matchesFilters(prod, filters) {
     }
   }
 
-  // 4. Stock Level Filter (OR within group, AND across groups)
-  if (filters.stockLevels && filters.stockLevels.length > 0) {
-    let stockCondition;
-    if (prod.currentStock < prod.safetyTarget) {
-      stockCondition = 'below';
-    } else if (prod.currentStock === prod.safetyTarget) {
-      stockCondition = 'at';
-    } else {
-      stockCondition = 'above';
-    }
-
-    if (!filters.stockLevels.includes(stockCondition)) {
-      return false;
-    }
-  }
-
-  // 5. Product Search in filter modal
+  // 4. Product Search in filter modal
   if (filters.search && filters.search.trim()) {
     const q = filters.search.trim().toLowerCase();
     const matchesSearch =

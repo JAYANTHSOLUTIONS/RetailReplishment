@@ -1,8 +1,5 @@
 // src/features/replenishment/PriorityRules.jsx
 // Displays and allows editing of the priority rules applied to each product.
-
-import React from 'react';
-
 export default function PriorityRules({ rules = [] }) {
   return (
     <section className="priority-rules" aria-label="Priority rules">

@@ -1,8 +1,5 @@
 // src/features/replenishment/SupplierSummary.jsx
 // Aggregates selected products by supplier; shows totals and minimum-order warnings.
-
-import React from 'react';
-
 export default function SupplierSummary({ supplierGroups = [] }) {
   return (
     <aside className="replenishment-supplier-summary" aria-label="Supplier order summary">

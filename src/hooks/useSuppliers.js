@@ -11,7 +11,6 @@ export function useSuppliers() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     suppliersService.getAll()
       .then((data) => { if (!cancelled) setSuppliers(data); })
       .catch((err)  => { if (!cancelled) setError(err);     })

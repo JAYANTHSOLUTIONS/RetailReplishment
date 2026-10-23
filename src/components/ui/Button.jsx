@@ -1,8 +1,5 @@
 // src/components/ui/Button.jsx
 // Accessible, variant-aware button primitive.
-
-import React from 'react';
-
 /**
  * @param {'primary'|'secondary'|'ghost'|'danger'} variant
  * @param {'sm'|'md'|'lg'} size

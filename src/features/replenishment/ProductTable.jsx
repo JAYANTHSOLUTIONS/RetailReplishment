@@ -1,8 +1,5 @@
 // src/features/replenishment/ProductTable.jsx
 // Displays the paginated/sorted list of products with selection checkboxes.
-
-import React from 'react';
-
 export default function ProductTable({ products = [], selectedIds = new Set(), onToggle }) {
   return (
     <div className="replenishment-table-wrapper" role="region" aria-label="Products">

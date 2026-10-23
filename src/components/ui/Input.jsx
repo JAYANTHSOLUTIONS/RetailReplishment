@@ -1,8 +1,5 @@
 // src/components/ui/Input.jsx
 // Accessible text / number input with label and error state.
-
-import React from 'react';
-
 export default function Input({
   id,
   label,

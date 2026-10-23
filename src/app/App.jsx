@@ -1,8 +1,5 @@
 // src/app/App.jsx
 // Root component: wraps global providers and renders the page layout.
-
-import React from 'react';
-
 export default function App() {
   return (
     <div id="app-root">
