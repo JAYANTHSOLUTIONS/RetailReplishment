@@ -41,6 +41,7 @@ import {
   SaveAllModal,
   ReorderConfirmModal,
   MobileReplenishmentView,
+  ColumnFilterDropdown,
 } from './components';
 import useReplenishmentShortcuts from './hooks/useReplenishmentShortcuts.js';
 
@@ -998,13 +999,16 @@ export default function ReplenishmentPage({
   }, []);
 
   const handleCommitInlineQtyToPending = useCallback((sku) => {
-    const check = validateOrderQtyInput(editQtyValue);
+    const prod = products.find((p) => p.sku === sku);
+    const check = validateOrderQtyInput(editQtyValue, prod ? {
+      currentStock: prod.currentStock,
+      safetyTarget: prod.safetyTarget,
+    } : {});
     if (!check.isValid) {
       setInlineQtyError(check.error);
       return false;
     }
     setInlineQtyError(null);
-    const prod = products.find((p) => p.sku === sku);
     const originalVal = prod ? String(prod.orderQty) : '0';
 
     if (editQtyValue !== originalVal) {
@@ -1033,21 +1037,23 @@ export default function ReplenishmentPage({
     setIsUnsaved(false);
   }, []);
 
-  // Save All behavior: Transactional commit of all pending quantity edits
+  // Save All behavior: Transactional commit of all pending quantity edits directly to SQLite without confirmation modal
   const handleConfirmSaveAll = async () => {
     const pendingSkus = Object.keys(pendingQtyEdits);
-    if (pendingSkus.length === 0) {
-      setSaveAllModalOpen(false);
-      return;
-    }
+    if (pendingSkus.length === 0) return;
 
     // Validate all pending edits first
     const editsToSave = [];
     for (const sku of pendingSkus) {
       const valStr = pendingQtyEdits[sku];
-      const check = validateOrderQtyInput(valStr);
+      const prod = products.find((p) => p.sku === sku);
+      const check = validateOrderQtyInput(valStr, prod ? {
+        currentStock: prod.currentStock,
+        safetyTarget: prod.safetyTarget,
+      } : {});
       if (!check.isValid) {
         setSaveAllError(`Invalid quantity for ${sku}: ${check.error}`);
+        showToast(`Invalid quantity for ${sku}: ${check.error}`, 'warn');
         return;
       }
       editsToSave.push({ sku, orderQty: check.value });
@@ -1061,10 +1067,11 @@ export default function ReplenishmentPage({
       setProducts(updated);
       setPendingQtyEdits({});
       setSaveAllModalOpen(false);
-      showToast(`Successfully saved all ${editsToSave.length} product quantity changes to SQLite.`);
+      showToast(`Successfully saved all ${editsToSave.length} product quantity changes to SQLite.`, 'success');
     } catch (err) {
       console.error('Save All transaction failed:', err);
       setSaveAllError(err.message || 'SQLite transaction failed. Changes were not committed.');
+      showToast('SQLite transaction failed. Changes were not committed.', 'warn');
     } finally {
       setIsSavingAll(false);
     }
@@ -1801,30 +1808,33 @@ export default function ReplenishmentPage({
                 <>
                   <div className="toolbar">
                     <div className="toolbar-selection-group">
-                      
-
-                      {eligibleFilteredProducts.length > eligiblePageProducts.length && (
+                      {selectedProducts.length > 0 && (
                         <button
-                          className={`btn-toolbar-scope ${isAllFilteredSelected ? 'active' : ''}`}
+                          type="button"
+                          className={`btn-toolbar-select-all ${isAllFilteredSelected ? 'active' : ''}`}
                           onClick={isAllFilteredSelected ? handleClearAllSelections : handleSelectAllFiltered}
-                          title="Select all filtered results across all pages"
+                          title={isAllFilteredSelected ? 'Deselect all products' : 'Select all products'}
                         >
-                          {isAllFilteredSelected ? 'Deselect All Filtered' : `Select All Results (${eligibleFilteredProducts.length})`}
+                          <input
+                            type="checkbox"
+                            checked={isAllFilteredSelected}
+                            readOnly
+                            style={{ pointerEvents: 'none' }}
+                          />
+                          <span>{isAllFilteredSelected ? 'Deselect All' : `Select All (${eligibleFilteredProducts.length})`}</span>
                         </button>
                       )}
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                      {/* Save All button when pending quantity edits exist */}
+                      {/* Save All button when pending quantity edits exist - saves directly to SQLite without confirmation modal */}
                       {Object.keys(pendingQtyEdits).length > 0 && (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                           <button
                             type="button"
                             className="btn-save-all"
-                            onClick={() => {
-                              setSaveAllError(null);
-                              setSaveAllModalOpen(true);
-                            }}
+                            onClick={handleConfirmSaveAll}
+                            disabled={isSavingAll}
                             title={`Save ${Object.keys(pendingQtyEdits).length} pending quantity changes`}
                             aria-label="Save All Pending Changes"
                           >
@@ -1833,7 +1843,7 @@ export default function ReplenishmentPage({
                               <polyline points="17 21 17 13 7 13 7 21" />
                               <polyline points="7 3 7 8 15 8" />
                             </svg>
-                            <span>Save All ({Object.keys(pendingQtyEdits).length})</span>
+                            <span>{isSavingAll ? 'Saving...' : `Save All (${Object.keys(pendingQtyEdits).length})`}</span>
                           </button>
                           <button
                             type="button"
@@ -1841,26 +1851,24 @@ export default function ReplenishmentPage({
                             onClick={handleDiscardAllPending}
                             title="Discard all pending quantity edits"
                           >
-                            Discard
+                            Cancel
                           </button>
                         </div>
                       )}
 
-                      {selectedProducts.length > 0 ? (
-                        <div className="bulk-toolbar">
-                          <span className="bulk-count">
-                            {selectedProducts.length} product{selectedProducts.length > 1 ? 's' : ''} selected
-                          </span>
-                          <button
-                            type="button"
-                            className="btn-bulk-cancel"
-                            onClick={handleClearAllSelections}
-                            title="Cancel selection"
-                          >
-                            Cancel Selection
-                          </button>
-                        </div>
-                      ) : (
+                      {/* Cancel selection button */}
+                      {selectedProducts.length > 0 && (
+                        <button
+                          type="button"
+                          className="btn-bulk-cancel"
+                          onClick={handleClearAllSelections}
+                          title="Cancel selection"
+                        >
+                          Cancel Selection
+                        </button>
+                      )}
+
+                      {selectedProducts.length === 0 && Object.keys(pendingQtyEdits).length === 0 && (
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button
                             type="button"
@@ -1998,71 +2006,84 @@ export default function ReplenishmentPage({
                         <th className="col-sku">SKU</th>
                         <th className="col-name">Product Name</th>
                         <th className="col-sup">
-                          <select
-                            className={`th-header-select ${colFilters.supplierId ? 'active' : ''}`}
-                            value={colFilters.supplierId}
-                            onChange={(e) => setColFilters((prev) => ({ ...prev, supplierId: e.target.value }))}
-                            aria-label="Filter by Supplier"
-                            title="Filter Supplier"
-                          >
-                            <option value="">Supplier (All)</option>
-                            {suppliers.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name}
-                              </option>
-                            ))}
-                          </select>
+                          <ColumnFilterDropdown
+                            title="Supplier"
+                            options={suppliers.map((s) => ({
+                              value: s.id,
+                              label: s.name,
+                              count: products.filter((p) => p.supplierId === s.id).length,
+                            }))}
+                            selectedValues={colFilters.supplierId ? [colFilters.supplierId] : []}
+                            onApply={({ selectedValues }) => {
+                              setColFilters((prev) => ({
+                                ...prev,
+                                supplierId: selectedValues.length > 0 ? selectedValues[0] : '',
+                              }));
+                            }}
+                            onClear={() => setColFilters((prev) => ({ ...prev, supplierId: '' }))}
+                          />
                         </th>
                         <th className="col-cat">
-                          <select
-                            className={`th-header-select ${colFilters.category ? 'active' : ''}`}
-                            value={colFilters.category}
-                            onChange={(e) => setColFilters((prev) => ({ ...prev, category: e.target.value }))}
-                            aria-label="Filter by Category"
-                            title="Filter Category"
-                          >
-                            <option value="">Category (All)</option>
-                            {categories.map((cat) => {
+                          <ColumnFilterDropdown
+                            title="Category"
+                            options={categories.map((cat) => {
                               const catName = typeof cat === 'string' ? cat : (cat.name || cat.id);
-                              return (
-                                <option key={cat.id || catName} value={catName}>
-                                  {catName}
-                                </option>
-                              );
+                              return {
+                                value: catName,
+                                label: catName,
+                                count: products.filter((p) => p.category === catName).length,
+                              };
                             })}
-                          </select>
+                            selectedValues={colFilters.category ? [colFilters.category] : []}
+                            onApply={({ selectedValues }) => {
+                              setColFilters((prev) => ({
+                                ...prev,
+                                category: selectedValues.length > 0 ? selectedValues[0] : '',
+                              }));
+                            }}
+                            onClear={() => setColFilters((prev) => ({ ...prev, category: '' }))}
+                          />
                         </th>
                         <th className="col-stk num">Stock</th>
                         <th className="col-tgt num">Target</th>
                         <th className="col-st">
-                          <select
-                            className={`th-header-select ${colFilters.status ? 'active' : ''}`}
-                            value={colFilters.status}
-                            onChange={(e) => setColFilters((prev) => ({ ...prev, status: e.target.value }))}
-                            aria-label="Filter by Status"
-                            title="Filter Status"
-                          >
-                            <option value="">Status (All)</option>
-                            <option value="critical">Critical</option>
-                            <option value="low">Low Stock</option>
-                            <option value="healthy">Healthy</option>
-                            <option value="excess">Excess</option>
-                          </select>
+                          <ColumnFilterDropdown
+                            title="Status"
+                            options={[
+                              { value: 'critical', label: 'Critical', count: products.filter((p) => (p.priority || p.status) === 'critical').length },
+                              { value: 'low', label: 'Low Stock', count: products.filter((p) => (p.priority || p.status) === 'low').length },
+                              { value: 'healthy', label: 'Healthy', count: products.filter((p) => (p.priority || p.status) === 'healthy').length },
+                              { value: 'excess', label: 'Excess', count: products.filter((p) => (p.priority || p.status) === 'excess').length },
+                            ]}
+                            selectedValues={colFilters.status ? [colFilters.status] : []}
+                            onApply={({ selectedValues }) => {
+                              setColFilters((prev) => ({
+                                ...prev,
+                                status: selectedValues.length > 0 ? selectedValues[0] : '',
+                              }));
+                            }}
+                            onClear={() => setColFilters((prev) => ({ ...prev, status: '' }))}
+                          />
                         </th>
                         <th className="col-qty">Order Qty</th>
                         <th className="col-prc num">Unit Price</th>
                         <th className="col-sub num">
-                          <select
-                            className={`th-header-select th-subtotal-select ${colFilters.subtotalSort ? 'active' : ''}`}
-                            value={colFilters.subtotalSort}
-                            onChange={(e) => setColFilters((prev) => ({ ...prev, subtotalSort: e.target.value }))}
-                            aria-label="Subtotal sort high or low"
-                            title="Sort Subtotal"
-                          >
-                            <option value="">Subtotal</option>
-                            <option value="high">High → Low</option>
-                            <option value="low">Low → High</option>
-                          </select>
+                          <ColumnFilterDropdown
+                            title="Subtotal"
+                            options={[]}
+                            currentSort={colFilters.subtotalSort}
+                            sortOptions={[
+                              { key: 'high', label: 'Sort High → Low' },
+                              { key: 'low', label: 'Sort Low → High' },
+                            ]}
+                            onApply={({ sort }) => {
+                              setColFilters((prev) => ({
+                                ...prev,
+                                subtotalSort: sort || '',
+                              }));
+                            }}
+                            onClear={() => setColFilters((prev) => ({ ...prev, subtotalSort: '' }))}
+                          />
                         </th>
                       </tr>
                     </thead>

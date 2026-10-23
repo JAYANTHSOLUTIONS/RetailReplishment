@@ -8,3 +8,4 @@ export { default as ProductRow } from './ProductRow.jsx';
 export { default as SaveAllModal } from './SaveAllModal.jsx';
 export { default as ReorderConfirmModal } from './ReorderConfirmModal.jsx';
 export { default as MobileReplenishmentView } from './MobileReplenishmentView.jsx';
+export { default as ColumnFilterDropdown } from './ColumnFilterDropdown.jsx';

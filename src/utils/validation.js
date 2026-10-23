@@ -125,8 +125,11 @@ export function sanitizeAlphaName(raw) {
 /**
  * Validates inline or single order quantity input.
  * Does NOT silently clamp; returns explicit validity and error message.
+ * Supports optional options: { currentStock, safetyTarget, maxLimit }
+ * - Minimum value must achieve safe target (safetyTarget - currentStock)
+ * - Maximum value cannot exceed maximum allowed units (default: 99,999)
  */
-export function validateOrderQtyInput(rawVal) {
+export function validateOrderQtyInput(rawVal, options = {}) {
   const str = String(rawVal ?? '').trim();
   if (str === '') {
     return { isValid: false, error: 'Quantity is required.', value: null };
@@ -146,13 +149,31 @@ export function validateOrderQtyInput(rawVal) {
       value: num,
     };
   }
-  if (num > FIELD_LIMITS.PRODUCT.QTY_MAX) {
+
+  const maxAllowed = options.maxLimit !== undefined ? Number(options.maxLimit) : FIELD_LIMITS.PRODUCT.QTY_MAX;
+  if (num > maxAllowed) {
     return {
       isValid: false,
-      error: `Quantity cannot exceed ${FIELD_LIMITS.PRODUCT.QTY_MAX.toLocaleString()} units.`,
+      error: `Quantity cannot exceed ${maxAllowed.toLocaleString()} units.`,
       value: num,
     };
   }
+
+  // Minimum required quantity to achieve safety target:
+  if (options.safetyTarget !== undefined && options.currentStock !== undefined) {
+    const safetyTarget = Number(options.safetyTarget) || 0;
+    const currentStock = Number(options.currentStock) || 0;
+    const minSafeQty = Math.max(0, safetyTarget - currentStock);
+
+    if (minSafeQty > 0 && num < minSafeQty) {
+      return {
+        isValid: false,
+        error: `Quantity must be at least ${minSafeQty} to achieve safety target (${safetyTarget}).`,
+        value: num,
+      };
+    }
+  }
+
   return { isValid: true, error: null, value: num };
 }
 

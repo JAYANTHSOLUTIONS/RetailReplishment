@@ -35,6 +35,9 @@ assert(validateOrderQtyInput('abc').isValid === false, 'Non-numeric order qty is
 assert(validateOrderQtyInput('0').isValid === true && validateOrderQtyInput('0').value === 0, '0 order qty is valid');
 assert(validateOrderQtyInput('42').isValid === true && validateOrderQtyInput('42').value === 42, '42 order qty is valid');
 assert(validateOrderQtyInput('  50  ').isValid === true && validateOrderQtyInput('  50  ').value === 50, 'Whitespace-trimmed order qty is valid');
+assert(validateOrderQtyInput('5', { currentStock: 10, safetyTarget: 30 }).isValid === false, 'Order qty below safety target deficit (20) is invalid');
+assert(validateOrderQtyInput('20', { currentStock: 10, safetyTarget: 30 }).isValid === true, 'Order qty meeting safety target deficit (20) is valid');
+assert(validateOrderQtyInput('25', { currentStock: 10, safetyTarget: 30 }).isValid === true, 'Order qty exceeding safety target deficit (20) is valid');
 
 // 2. Product Form Validation
 const existingProducts = [
