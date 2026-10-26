@@ -5,8 +5,10 @@ import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import LoginIcon from '@mui/icons-material/Login';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
+import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ThemeSwitcher from '../../components/ui/ThemeSwitcher.jsx';
+import { authenticateUser, ROLES } from '../../services/authService.js';
 
 export default function LoginPage({
   onLoginSuccess,
@@ -15,55 +17,39 @@ export default function LoginPage({
 }) {
   const [email, setEmail] = useState('admin@stockdesk.com');
   const [password, setPassword] = useState('admin123');
+  const [roleId, setRoleId] = useState('approver');
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleAuth = async (credentials) => {
     setError('');
-
-    const cleanEmail = email.trim();
-    if (!cleanEmail) {
-      setError('Please enter your email address.');
-      return;
-    }
-    if (!password) {
-      setError('Please enter your password.');
-      return;
-    }
-
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const { user } = await authenticateUser(credentials);
       setIsLoading(false);
-      const user = {
-        name: cleanEmail.includes('admin') ? 'Store Inventory Admin' : 'Procurement Manager',
-        email: cleanEmail,
-        role: 'Operations & Replenishment Director',
-        avatar: 'AD',
-        loginTime: new Date().toISOString(),
-      };
-      if (rememberMe) {
-        localStorage.setItem('stockdesk_auth_user', JSON.stringify(user));
-      }
       onLoginSuccess(user);
-    }, 400);
+    } catch (err) {
+      setIsLoading(false);
+      setError(err?.message || 'Authentication failed. Please verify your credentials.');
+    }
   };
 
-  const handleQuickDemoLogin = () => {
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      const user = {
-        name: 'Store Inventory Admin',
-        email: 'admin@stockdesk.com',
-        role: 'Operations & Replenishment Director',
-        avatar: 'AD',
-        loginTime: new Date().toISOString(),
-      };
-      localStorage.setItem('stockdesk_auth_user', JSON.stringify(user));
-      onLoginSuccess(user);
-    }, 250);
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    handleAuth({ email, password, roleId, rememberMe });
+  };
+
+  const handleRoleQuickLogin = (selectedRole, defaultEmail = null) => {
+    const credEmail = defaultEmail || (selectedRole === 'approver' ? 'director@stockdesk.com' : 'clerk@stockdesk.com');
+    setRoleId(selectedRole);
+    setEmail(credEmail);
+    handleAuth({
+      email: credEmail,
+      password: 'authSecurePassword123',
+      roleId: selectedRole,
+      rememberMe,
+    });
   };
 
   return (
@@ -90,7 +76,7 @@ export default function LoginPage({
       <div
         style={{
           width: '100%',
-          maxWidth: 440,
+          maxWidth: 460,
           background: 'var(--surface, #ffffff)',
           border: '1px solid var(--border, #e2e8f0)',
           borderRadius: 14,
@@ -99,7 +85,7 @@ export default function LoginPage({
         }}
       >
         {/* Header Branding */}
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div
             style={{
               width: 52,
@@ -110,7 +96,7 @@ export default function LoginPage({
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              marginBottom: 14,
+              marginBottom: 12,
               boxShadow: '0 6px 16px rgba(37, 99, 235, 0.3)',
             }}
           >
@@ -125,7 +111,7 @@ export default function LoginPage({
               letterSpacing: '-0.02em',
             }}
           >
-            StockDesk Portal
+            StockDesk Secure Portal
           </h1>
           <p
             style={{
@@ -134,7 +120,7 @@ export default function LoginPage({
               color: 'var(--text3, #64748b)',
             }}
           >
-            Enterprise Replenishment &amp; Inventory Operations
+            Token-Based Session Authentication &amp; RBAC Access
           </p>
         </div>
 
@@ -161,7 +147,7 @@ export default function LoginPage({
 
         <form onSubmit={handleSubmit} noValidate>
           {/* Email Input */}
-          <div style={{ marginBottom: 18 }}>
+          <div style={{ marginBottom: 16 }}>
             <label
               htmlFor="auth-email"
               style={{
@@ -172,7 +158,7 @@ export default function LoginPage({
                 marginBottom: 6,
               }}
             >
-              Work Email Address
+              Enterprise Work Email
             </label>
             <div
               style={{
@@ -206,7 +192,7 @@ export default function LoginPage({
           </div>
 
           {/* Password Input */}
-          <div style={{ marginBottom: 18 }}>
+          <div style={{ marginBottom: 16 }}>
             <label
               htmlFor="auth-password"
               style={{
@@ -250,13 +236,68 @@ export default function LoginPage({
             </div>
           </div>
 
+          {/* Role-Based Permissions Selection */}
+          <div style={{ marginBottom: 18 }}>
+            <label
+              htmlFor="auth-role"
+              style={{
+                display: 'block',
+                fontSize: 12,
+                fontWeight: 600,
+                color: 'var(--text, #1e293b)',
+                marginBottom: 6,
+              }}
+            >
+              Operational Role &amp; Permissions
+            </label>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '0 12px',
+                height: 42,
+                background: 'var(--bg, #f8fafc)',
+                border: '1px solid var(--border, #cbd5e1)',
+                borderRadius: 8,
+              }}
+            >
+              <BadgeOutlinedIcon style={{ fontSize: 18, color: 'var(--text3, #94a3b8)' }} />
+              <select
+                id="auth-role"
+                value={roleId}
+                onChange={(e) => setRoleId(e.target.value)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  outline: 'none',
+                  width: '100%',
+                  fontSize: 13,
+                  color: 'var(--text, #0f172a)',
+                  cursor: 'pointer',
+                }}
+              >
+                {Object.values(ROLES).map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text3, #64748b)', marginTop: 4 }}>
+              {roleId === 'approver' && '✓ Full PO Dispatch, Supplier Management & Financial Approval'}
+              {roleId === 'buyer' && '✓ Quantity Planning, Bulk Target Adjustments & PO Drafting'}
+              {roleId === 'clerk' && '✓ Catalog Read & Inline Drafts (Approval by Supervisor Required)'}
+            </div>
+          </div>
+
           {/* Remember me */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              marginBottom: 24,
+              marginBottom: 20,
               fontSize: 12,
             }}
           >
@@ -267,10 +308,10 @@ export default function LoginPage({
                 onChange={(e) => setRememberMe(e.target.checked)}
                 style={{ accentColor: 'var(--brand, #2563eb)' }}
               />
-              <span>Remember this session</span>
+              <span>Remember session token</span>
             </label>
             <span style={{ color: 'var(--brand, #2563eb)', cursor: 'pointer', fontWeight: 500 }}>
-              Forgot password?
+              Single Sign-On (SSO)
             </span>
           </div>
 
@@ -297,7 +338,7 @@ export default function LoginPage({
             }}
           >
             <LoginIcon style={{ fontSize: 18 }} />
-            <span>{isLoading ? 'Verifying Credentials...' : 'Sign In to Workspace'}</span>
+            <span>{isLoading ? 'Generating Session Token...' : 'Authorize Session'}</span>
           </button>
         </form>
 
@@ -306,7 +347,7 @@ export default function LoginPage({
           style={{
             display: 'flex',
             alignItems: 'center',
-            margin: '22px 0',
+            margin: '20px 0',
             color: 'var(--text3, #94a3b8)',
             fontSize: 11,
             textTransform: 'uppercase',
@@ -314,51 +355,57 @@ export default function LoginPage({
           }}
         >
           <div style={{ flex: 1, height: 1, background: 'var(--border, #e2e8f0)' }} />
-          <span style={{ padding: '0 12px' }}>or instant access</span>
+          <span style={{ padding: '0 12px' }}>Role Presets</span>
           <div style={{ flex: 1, height: 1, background: 'var(--border, #e2e8f0)' }} />
         </div>
 
-        {/* Fast 1-Click Demo Login Button */}
-        <button
-          type="button"
-          onClick={handleQuickDemoLogin}
-          disabled={isLoading}
-          style={{
-            width: '100%',
-            height: 42,
-            borderRadius: 8,
-            background: 'var(--surface-hover, rgba(37, 99, 235, 0.06))',
-            color: 'var(--brand, #2563eb)',
-            border: '1px solid var(--border, #cbd5e1)',
-            fontSize: 13,
-            fontWeight: 700,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            cursor: isLoading ? 'not-allowed' : 'pointer',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          <span>⚡ Fast Demo Login (Admin)</span>
-          <ArrowForwardIcon style={{ fontSize: 16 }} />
-        </button>
+        {/* Quick RBAC Role Buttons */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <button
+            type="button"
+            onClick={() => handleRoleQuickLogin('approver')}
+            disabled={isLoading}
+            style={{
+              height: 38,
+              borderRadius: 8,
+              background: 'var(--surface-hover, rgba(37, 99, 235, 0.06))',
+              color: 'var(--brand, #2563eb)',
+              border: '1px solid var(--border, #cbd5e1)',
+              fontSize: 12,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <span>⚡ Approver</span>
+            <ArrowForwardIcon style={{ fontSize: 14 }} />
+          </button>
 
-        <div
-          style={{
-            marginTop: 22,
-            padding: 12,
-            background: 'var(--bg, #f8fafc)',
-            borderRadius: 8,
-            fontSize: 11,
-            color: 'var(--text3, #64748b)',
-            lineHeight: 1.5,
-            border: '1px solid var(--border, #e2e8f0)',
-          }}
-        >
-          <strong>Demo credentials:</strong><br />
-          Email: <code style={{ color: 'var(--brand)' }}>admin@stockdesk.com</code><br />
-          Password: <code style={{ color: 'var(--brand)' }}>admin123</code>
+          <button
+            type="button"
+            onClick={() => handleRoleQuickLogin('clerk')}
+            disabled={isLoading}
+            style={{
+              height: 38,
+              borderRadius: 8,
+              background: 'var(--surface-hover, rgba(37, 99, 235, 0.06))',
+              color: 'var(--text2, #475569)',
+              border: '1px solid var(--border, #cbd5e1)',
+              fontSize: 12,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <span>📋 Clerk</span>
+            <ArrowForwardIcon style={{ fontSize: 14 }} />
+          </button>
         </div>
       </div>
     </div>

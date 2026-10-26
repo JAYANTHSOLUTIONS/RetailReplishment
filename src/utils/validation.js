@@ -56,7 +56,7 @@ export const FIELD_LIMITS = {
 };
 
 const EMAIL_REGEX = /^[a-zA-Z]{4,}[a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-const PHONE_REGEX = /^\+?[0-9]{7,15}$/;
+const PHONE_REGEX = /^\+?[0-9]{7,10}$/;
 
 /**
  * Sanitizes mobile number input: allows leading + and digits only, max 15 chars.
@@ -67,7 +67,7 @@ export function sanitizeMobileInput(raw) {
   const hasPlus = str.includes('+');
   const digits = str.replace(/\D/g, '');
   const result = hasPlus ? `+${digits}` : digits;
-  return result.slice(0, 15);
+  return result.slice(0, 10);
 }
 
 /**

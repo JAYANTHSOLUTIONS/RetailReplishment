@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
 import '../../styles/replenishment.css';
 import { fetchInventory, fetchSuppliers, fetchAllManifests, fetchPOHistory } from '../../db/queries.js';
 import ReplenishmentTopbar from '../replenishment/components/ReplenishmentTopbar.jsx';
 import KeyboardShortcutsModal from '../../components/ui/KeyboardShortcutsModal.jsx';
+import useGlobalNavigationShortcuts from '../../hooks/useGlobalNavigationShortcuts.js';
 
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
@@ -30,6 +31,15 @@ export default function DashboardPage({
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = useRef(null);
+
+  // Global Keyboard Navigation (Alt+1..5, Ctrl+K, ?, Esc)
+  useGlobalNavigationShortcuts({
+    onNavigateTo,
+    searchInputRef,
+    shortcutsModalOpen,
+    setShortcutsModalOpen,
+  });
 
   // Responsive width
   const [windowWidth, setWindowWidth] = useState(() =>
@@ -109,6 +119,7 @@ export default function DashboardPage({
       <ReplenishmentTopbar
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
+        searchInputRef={searchInputRef}
         windowWidth={windowWidth}
         mobileSidebarOpen={mobileSidebarOpen}
         setMobileSidebarOpen={setMobileSidebarOpen}
@@ -494,7 +505,7 @@ export default function DashboardPage({
                             type="button"
                             className="redesign-action-btn primary"
                             style={{ padding: '3px 8px', fontSize: 11 }}
-                            onClick={() => onNavigateTo('replenishment', { supplier: item.supplierId })}
+                            onClick={() => onNavigateTo('replenishment', { supplier: item.supplierId, reorderProduct: item })}
                           >
                             Reorder
                           </button>

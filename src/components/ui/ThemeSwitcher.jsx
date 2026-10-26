@@ -1,57 +1,71 @@
-// src/components/ui/ThemeSwitcher.jsx
+"use client";
 
-import WbSunnyIcon from '@mui/icons-material/WbSunny';
-import DarkModeIcon from '@mui/icons-material/DarkMode';
-import SettingsBrightnessIcon from '@mui/icons-material/SettingsBrightness';
+import { useRef, useState } from "react";
+import { Laptop, Moon, Sun } from "lucide-react";
 
-/**
- * Single accessible theme toggle button that cycles between Light -> Dark -> System.
- * @param {'light'|'dark'|'system'} value - Current active theme
- * @param {(theme: 'light'|'dark'|'system') => void} onChange - Callback when theme changes
- * @param {string} [className] - Optional extra class
- */
-export default function ThemeSwitcher({ value = 'system', onChange, className = '' }) {
-  const modes = {
-    light: {
-      next: 'dark',
-      label: 'Light',
-      nextLabel: 'Dark',
-      iconClass: 'theme-icon-sun',
-      icon: <WbSunnyIcon style={{ fontSize: 16 }} />,
-    },
-    dark: {
-      next: 'system',
-      label: 'Dark',
-      nextLabel: 'System',
-      iconClass: 'theme-icon-moon',
-      icon: <DarkModeIcon style={{ fontSize: 16 }} />,
-    },
-    system: {
-      next: 'light',
-      label: 'System',
-      nextLabel: 'Light',
-      iconClass: 'theme-icon-system',
-      icon: <SettingsBrightnessIcon style={{ fontSize: 16 }} />,
-    },
-  };
+const icons = [
+  { label: "Sun", theme: "light", Component: Sun },
+  { label: "Moon", theme: "dark", Component: Moon },
+  { label: "Laptop", theme: "system", Component: Laptop },
+];
 
-  const current = modes[value] || modes.system;
+const themeToIndex = {
+  light: 0,
+  dark: 1,
+  system: 2,
+};
 
-  const handleClick = () => {
-    onChange?.(current.next);
-  };
+export default function IconCycleButton({ value, onChange, className = '', style = {} }) {
+  const [index, setIndex] = useState(() => (value && themeToIndex[value] !== undefined ? themeToIndex[value] : 0));
+  const iconRef = useRef(null);
+
+  const activeIndex = value !== undefined && themeToIndex[value] !== undefined ? themeToIndex[value] : index;
+  const current = icons[activeIndex] || icons[0];
+  const next = icons[(activeIndex + 1) % icons.length];
+  const CurrentIcon = current.Component;
+
+  function handleClick() {
+    const nextIndex = (activeIndex + 1) % icons.length;
+    setIndex(nextIndex);
+    onChange?.(icons[nextIndex].theme);
+
+    const icon = iconRef.current;
+    if (!icon || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    icon.getAnimations().forEach((animation) => animation.cancel());
+    icon.animate(
+      [{ transform: "rotate(0deg)" }, { transform: "rotate(360deg)" }],
+      { duration: 560, iterations: 1, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
+    );
+  }
 
   return (
     <button
       type="button"
       onClick={handleClick}
-      className={`ui-theme-toggle-btn ${className}`}
-      title={`Theme: ${current.label} (Click to switch to ${current.nextLabel})`}
-      aria-label={`Theme: ${current.label}. Click to switch to ${current.nextLabel}`}
+      aria-label={`Current icon: ${current.label}. Click to show ${next.label}.`}
+      title={`Show ${next.label} icon`}
+      className={className}
+      style={{
+        width: 48,
+        height: 48,
+        padding: 0,
+        display: "grid",
+        placeItems: "center",
+        border: "1px solid currentColor",
+        borderRadius: "50%",
+        background: "transparent",
+        color: "inherit",
+        cursor: "pointer",
+        ...style,
+      }}
     >
-      <span className={`ui-theme-toggle-icon ${current.iconClass}`}>{current.icon}</span>
-      <span className="ui-theme-toggle-label">{current.label}</span>
+      <span ref={iconRef} aria-hidden="true" style={{ display: "grid" }}>
+        <CurrentIcon size={20} strokeWidth={1.8} />
+      </span>
     </button>
   );
 }
 
+// Alias export for backwards compatibility
+export { IconCycleButton as ThemeSwitcher };

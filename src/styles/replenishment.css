@@ -144,8 +144,8 @@ body {
 
 .rp-body {
   display: grid;
-  grid-template-columns: 52px 260px 1fr 320px;
-  transition: grid-template-columns 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  grid-template-columns: 48px 0px 1fr 0px;
+  transition: grid-template-columns 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
   min-width: 0;
   min-height: 0;
@@ -525,6 +525,36 @@ body {
   flex-direction: column;
   overflow: hidden;
   height: 100%;
+  width: 100%;
+  min-width: 0;
+  transition: opacity 0.3s ease, visibility 0.3s ease, border-color 0.3s ease;
+}
+.sq.is-collapsed {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  border-right-color: transparent;
+}
+.sq.is-active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  border-right-color: var(--border);
+}
+.sq-inner {
+  width: 260px;
+  min-width: 260px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sq.is-collapsed .sq-inner {
+  transform: translateX(-24px);
+}
+.sq.is-active .sq-inner {
+  transform: translateX(0);
 }
 
 .sq-head {
@@ -1015,18 +1045,21 @@ body {
   overflow-x: auto;
   min-height: 220px;
   scroll-behavior: smooth;
+  width: 100%;
 }
 
 .tbl {
   width: 100%;
+  min-width: 1100px;
   border-collapse: collapse;
   font-size: 12px;
-  table-layout: auto;
+  table-layout: fixed;
 }
 .tbl thead th {
   position: sticky;
   top: 0;
   z-index: 3;
+  overflow: visible !important;
   padding: 10px 12px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -1179,19 +1212,82 @@ body {
   background: rgba(56, 139, 253, 0.12);
 }
 
-/* Column Sizing */
-.col-chk  { width: 36px; min-width: 36px; padding-left: 14px !important; }
-.col-id   { width: 75px; min-width: 75px; white-space: nowrap; font-size: 11px; color: var(--text3); }
-.col-sku  { width: 75px; min-width: 75px; white-space: nowrap; color: var(--text); }
-.col-name { min-width: 140px; color: var(--text); }
-.col-sup  { width: 130px; min-width: 130px; white-space: nowrap; font-size: 12px; color: var(--text2); }
-.col-cat  { width: 100px; min-width: 100px; white-space: nowrap; font-size: 11px; color: var(--text3); }
-.col-stk  { width: 68px; min-width: 68px; text-align: right !important; color: var(--text); }
-.col-tgt  { width: 68px; min-width: 68px; text-align: right !important; color: var(--text2); }
-.col-st   { width: 85px; min-width: 85px; }
-.col-qty  { width: 115px; min-width: 115px; }
-.col-prc  { width: 75px; min-width: 75px; text-align: right !important; color: var(--text); }
-.col-sub  { width: 95px; min-width: 95px; text-align: right !important; padding-right: 18px !important; color: var(--text); }
+/* Column Sizing - Perfectly balanced proportions without wasted gaps or clipped content */
+.col-chk  { width: 44px; padding-left: 14px !important; padding-right: 6px !important; text-align: left; }
+.col-id   { width: 85px; min-width: 80px; font-size: 11px; color: var(--text3); }
+.col-sku  { width: 95px; min-width: 90px; font-size: 11px; color: var(--text); }
+.col-name { width: 230px; min-width: 200px; color: var(--text); }
+.col-sup  { width: 175px; min-width: 160px; font-size: 11px; color: var(--text2); }
+.col-cat  { width: 130px; min-width: 125px; font-size: 11px; color: var(--text3); }
+.col-stk  { width: 58px; text-align: right !important; color: var(--text); font-size: 11px; }
+.col-tgt  { width: 58px; text-align: right !important; color: var(--text2); font-size: 11px; }
+.col-st   { width: 95px; text-align: center; }
+.col-qty  { width: 96px; min-width: 92px; text-align: center; position: relative; }
+.col-prc  { width: 75px; text-align: right !important; color: var(--text); font-size: 11px; }
+.col-sub  { width: 85px; text-align: right !important; color: var(--text); font-size: 11px; }
+.col-act  { width: 75px; padding-right: 14px !important; padding-left: 6px !important; text-align: center; }
+
+/* Constrain inline quantity validation errors strictly to the qty cell */
+td.col-qty {
+  position: relative;
+  overflow: visible;
+}
+.inline-qty-error {
+  max-width: 92px;
+  white-space: normal !important;
+  word-break: break-word;
+  line-height: 1.15;
+  margin: 2px auto 0 auto;
+}
+
+/* Truncation and text wrapping rules for table data cells */
+td.col-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 85px;
+}
+td.col-sku {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 95px;
+}
+td.col-name {
+  white-space: normal !important;
+  word-break: break-word;
+  overflow: visible;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  vertical-align: middle;
+}
+td.col-sup {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+td.col-cat {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Table headers MUST ALWAYS be overflow: visible so filter & sort popover menu cards are not clipped */
+th.col-name,
+th.col-sup,
+th.col-cat,
+th.col-st,
+th.col-sub,
+.tbl thead th {
+  overflow: visible !important;
+}
+
+/* Elevated z-index on header when dropdown popover is open so neighboring sticky headers do not overlap */
+.tbl thead th.has-open-filter,
+.tbl thead th:has(.col-filter-popover),
+th.has-open-filter {
+  z-index: 120 !important;
+}
 
 /* Dark mode specific styling for table columns */
 [data-theme="dark"] .col-chk  { color: #f0f3f6; }
@@ -1360,7 +1456,13 @@ body {
   opacity: 0.88;
 }
 .pr td.col-chk {
-  padding-left: 14px;
+  padding-left: 18px !important;
+  padding-right: 6px !important;
+}
+.pr td.col-act {
+  padding-right: 18px !important;
+  padding-left: 6px !important;
+  text-align: center;
 }
 .pr td.col-stk,
 .pr td.col-tgt {
@@ -1369,23 +1471,38 @@ body {
   font-size: 12px;
 }
 .pr td.col-sub {
-  text-align: right;
-  padding-right: 18px;
+  text-align: right !important;
+  padding-right: 10px !important;
   font-weight: 700;
   font-size: 12px;
   color: var(--text);
 }
 
+.prod-id-code {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text3);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .sku-lbl {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text2);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .prod-name {
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
 }
 .prod-cat {
   font-size: 11px;
@@ -1768,6 +1885,36 @@ body {
   flex-direction: column;
   overflow: hidden;
   height: 100%;
+  width: 100%;
+  min-width: 0;
+  transition: opacity 0.3s ease, visibility 0.3s ease, border-color 0.3s ease;
+}
+.po.is-collapsed {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  border-left-color: transparent;
+}
+.po.is-active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  border-left-color: var(--border);
+}
+.po-inner {
+  width: 320px;
+  min-width: 320px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.po.is-collapsed .po-inner {
+  transform: translateX(24px);
+}
+.po.is-active .po-inner {
+  transform: translateX(0);
 }
 
 .po-head {
@@ -7005,7 +7152,7 @@ button, input, select, textarea, .btn-replenish, .btn-delivered-action {
 
 .redesign-table-wrapper {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -7013,6 +7160,7 @@ button, input, select, textarea, .btn-replenish, .btn-delivered-action {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
+  table-layout: fixed;
 }
 
 .redesign-table th {
@@ -7031,12 +7179,19 @@ button, input, select, textarea, .btn-replenish, .btn-delivered-action {
   background: rgba(255, 255, 255, 0.02);
 }
 
+.redesign-table tr:focus,
+.redesign-table tr:focus-visible {
+  outline: none;
+}
+
 .redesign-table td {
   padding: 14px 16px;
   font-size: 13px;
   color: var(--text);
   border-bottom: 1px solid var(--border-light);
   vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .redesign-table tr.row-active {
@@ -7241,12 +7396,17 @@ button, input, select, textarea, .btn-replenish, .btn-delivered-action {
   width: 100%;
   position: relative;
   gap: 4px;
+  min-width: 0;
 }
 .col-filter-title {
   font-weight: 600;
   font-size: 11px;
   color: inherit;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .col-filter-trigger-btn {
   display: inline-flex;
@@ -7279,12 +7439,12 @@ button, input, select, textarea, .btn-replenish, .btn-delivered-action {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  width: 220px;
+  width: 224px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.15);
-  z-index: 100;
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.35), 0 8px 12px -6px rgba(0, 0, 0, 0.2);
+  z-index: 1000 !important;
   padding: 8px 0;
   text-align: left;
   font-family: inherit;

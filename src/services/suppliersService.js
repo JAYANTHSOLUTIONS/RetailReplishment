@@ -1,9 +1,12 @@
 // src/services/suppliersService.js
-// CRUD operations for the /suppliers resource.
+// Authoritative Service layer wrapping SQLite WASM queries
 
-import { apiClient } from './apiClient';
+import {
+  fetchSuppliers,
+  fetchSupplierContact,
+} from '../db/queries.js';
 
 export const suppliersService = {
-  getAll:  ()    => apiClient.get('/suppliers'),
-  getById: (id)  => apiClient.get(`/suppliers/${id}`),
+  getAll: () => fetchSuppliers(),
+  getById: (id) => fetchSupplierContact(id),
 };

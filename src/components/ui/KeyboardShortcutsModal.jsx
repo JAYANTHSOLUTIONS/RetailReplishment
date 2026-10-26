@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import PropTypes from 'prop-types';
 import Button from './Button.jsx';
 
 /**
@@ -65,7 +66,7 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }) {
       <div
         ref={modalRef}
         className="modal-dialog modal-dialog-centered"
-        style={{ maxWidth: 540, width: '92%' }}
+        style={{ maxWidth: 560, width: '92%' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-content info-modal-card">
@@ -92,16 +93,69 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }) {
             </button>
           </div>
 
-          <div className="modal-body info-modal-body" style={{ padding: '16px 20px', maxHeight: '70vh', overflowY: 'auto' }}>
-            {/* Section 1: Table & Row Navigation */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 10 }}>
-                Table Navigation &amp; Selection
+          <div className="modal-body info-modal-body" style={{ padding: '16px 20px', maxHeight: '72vh', overflowY: 'auto' }}>
+            {/* Section 1: Page Switching Navigation */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 8 }}>
+                Quick Page Switching (Available Everywhere)
               </div>
-              <div className="kbd-shortcut-list" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+              <div className="kbd-shortcut-list" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Executive Dashboard</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <kbd className="kbd-key">Alt</kbd>
+                    <span style={{ color: 'var(--text3)', fontSize: 11 }}>+</span>
+                    <kbd className="kbd-key">1</kbd>
+                  </div>
+                </div>
+
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Replenishment Matrix</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <kbd className="kbd-key">Alt</kbd>
+                    <span style={{ color: 'var(--text3)', fontSize: 11 }}>+</span>
+                    <kbd className="kbd-key">2</kbd>
+                  </div>
+                </div>
+
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Inbound Manifests</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <kbd className="kbd-key">Alt</kbd>
+                    <span style={{ color: 'var(--text3)', fontSize: 11 }}>+</span>
+                    <kbd className="kbd-key">3</kbd>
+                  </div>
+                </div>
+
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Supplier Directory</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <kbd className="kbd-key">Alt</kbd>
+                    <span style={{ color: 'var(--text3)', fontSize: 11 }}>+</span>
+                    <kbd className="kbd-key">4</kbd>
+                  </div>
+                </div>
+
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Purchase Order History</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <kbd className="kbd-key">Alt</kbd>
+                    <span style={{ color: 'var(--text3)', fontSize: 11 }}>+</span>
+                    <kbd className="kbd-key">5</kbd>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Table & Row Navigation */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 8 }}>
+                Table Navigation &amp; Selection (All Pages)
+              </div>
+              <div className="kbd-shortcut-list" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
                   <span style={{ fontSize: 13, color: 'var(--text)' }}>Move row focus up / down</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <kbd className="kbd-key">↑</kbd>
                     <kbd className="kbd-key">↓</kbd>
                     <span style={{ color: 'var(--text3)', fontSize: 11, margin: '0 2px' }}>or</span>
@@ -110,28 +164,23 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }) {
                   </div>
                 </div>
 
-                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Select or deselect focused row</span>
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Select row / Toggle checkbox / Expand</span>
                   <kbd className="kbd-key">Space</kbd>
                 </div>
 
-                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Inline edit quantity / Confirm &amp; save</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Edit item / View details / Confirm edit</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <kbd className="kbd-key">Enter</kbd>
                     <span style={{ color: 'var(--text3)', fontSize: 11, margin: '0 2px' }}>or</span>
                     <kbd className="kbd-key">F2</kbd>
                   </div>
                 </div>
 
-                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Cancel edit / Revert quantity</span>
-                  <kbd className="kbd-key">Esc</kbd>
-                </div>
-
-                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Jump to first / last row on page</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Jump to first / last row</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <kbd className="kbd-key">Home</kbd>
                     <kbd className="kbd-key">End</kbd>
                   </div>
@@ -139,36 +188,36 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }) {
               </div>
             </div>
 
-            {/* Section 2: Global Shortcuts */}
+            {/* Section 3: Global Commands */}
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 8 }}>
                 Global Commands &amp; Dialogs
               </div>
-              <div className="kbd-shortcut-list" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+              <div className="kbd-shortcut-list" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
                   <span style={{ fontSize: 13, color: 'var(--text)' }}>Focus global catalog search</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <kbd className="kbd-key">Ctrl</kbd>
                     <span style={{ color: 'var(--text3)', fontSize: 11 }}>+</span>
                     <kbd className="kbd-key">K</kbd>
                   </div>
                 </div>
 
-                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Save purchase order draft</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Save inline quantity edit / Save draft</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <kbd className="kbd-key">Ctrl</kbd>
                     <span style={{ color: 'var(--text3)', fontSize: 11 }}>+</span>
                     <kbd className="kbd-key">S</kbd>
                   </div>
                 </div>
 
-                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Toggle shortcuts navigation modal</span>
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>Toggle shortcuts navigation dialog</span>
                   <kbd className="kbd-key">?</kbd>
                 </div>
 
-                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
+                <div className="kbd-shortcut-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, background: 'var(--table-row-bg)', border: '1px solid var(--border-light)' }}>
                   <span style={{ fontSize: 13, color: 'var(--text)' }}>Dismiss active modal / blur focus</span>
                   <kbd className="kbd-key">Esc</kbd>
                 </div>
@@ -190,3 +239,8 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }) {
     </div>
   );
 }
+
+KeyboardShortcutsModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+};

@@ -36,17 +36,46 @@ export default function useReplenishmentShortcuts({
   editingSku,
   setEditingSku,
   handleCancelCurrentInlineQty,
+  handleCommitInlineQtyToPending,
   handleToggleSelect,
   pendingQtyEdits = {},
   setEditQtyValue,
   setInlineQtyError,
   setIsUnsaved,
+  onNavigateToDashboard,
+  onNavigateToManifests,
+  onNavigateToSuppliers,
+  onNavigateToHistory,
 }) {
   const handleGlobalKeyDownRef = useRef();
 
   useEffect(() => {
     handleGlobalKeyDownRef.current = (e) => {
       const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
+
+      // Page Navigation Shortcuts: Alt + 1..5
+      if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        if (e.key === '1') {
+          e.preventDefault();
+          onNavigateToDashboard?.();
+          return;
+        }
+        if (e.key === '3') {
+          e.preventDefault();
+          onNavigateToManifests?.();
+          return;
+        }
+        if (e.key === '4') {
+          e.preventDefault();
+          onNavigateToSuppliers?.();
+          return;
+        }
+        if (e.key === '5') {
+          e.preventDefault();
+          onNavigateToHistory?.();
+          return;
+        }
+      }
 
       // Windows Ctrl+K (or Mac Cmd+K) to focus global search
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -56,9 +85,13 @@ export default function useReplenishmentShortcuts({
         return;
       }
 
-      // Windows Ctrl+S (or Mac Cmd+S) to save draft with SQLite confirmation
+      // Windows Ctrl+S (or Mac Cmd+S) to save inline edit if editing, or save draft with SQLite confirmation
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
+        if (editingSku) {
+          handleCommitInlineQtyToPending?.(editingSku);
+          return;
+        }
         handlePromptSaveDraft?.();
         return;
       }

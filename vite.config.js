@@ -25,5 +25,9 @@ export default defineConfig({
     exclude: ['@sqlite.org/sqlite-wasm'],
     include: ['react', 'react-dom'],
   },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+  },
 })
 

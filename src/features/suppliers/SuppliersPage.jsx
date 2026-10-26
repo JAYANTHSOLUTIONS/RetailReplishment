@@ -1,15 +1,17 @@
 import { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
+import PropTypes from 'prop-types';
 import '../../styles/replenishment.css';
-import { fetchSuppliers, fetchProductCounts, updateSupplier } from '../../db/queries.js';
+import { fetchSuppliers, fetchProductCounts } from '../../db/queries.js';
 import ReplenishmentTopbar from '../replenishment/components/ReplenishmentTopbar.jsx';
 import KeyboardShortcutsModal from '../../components/ui/KeyboardShortcutsModal.jsx';
+import AddSupplierModal from '../replenishment/AddSupplierModal.jsx';
+import useGlobalNavigationShortcuts from '../../hooks/useGlobalNavigationShortcuts.js';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
 
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
 import EditIcon from '@mui/icons-material/Edit';
-import SaveIcon from '@mui/icons-material/Save';
-import CloseIcon from '@mui/icons-material/Close';
+import AddIcon from '@mui/icons-material/Add';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import AppNavigationRail from '../../components/layout/AppNavigationRail.jsx';
 
@@ -25,19 +27,24 @@ export default function SuppliersPage({
   const [productCounts, setProductCounts] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const deferredSearchTerm = useDeferredValue(searchTerm);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [selectedSupplierId, setSelectedSupplierId] = useState('hf');
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // Inline editing state
-  const [editingSupplierId, setEditingSupplierId] = useState(null);
-  const [editForm, setEditForm] = useState({});
-  const [isSaving, setIsSaving] = useState(false);
+  // Supplier modal state (shared between Add and Edit)
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false);
+  const [supplierToEdit, setSupplierToEdit] = useState(null);
 
+  // Table row keyboard navigation
+  const [focusedIndex, setFocusedIndex] = useState(0);
   const searchInputRef = useRef(null);
+  const tableRef = useRef(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // Responsive layout state
   const [windowWidth, setWindowWidth] = useState(() =>
@@ -86,38 +93,6 @@ export default function SuppliersPage({
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Keyboard navigation & shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      const isInput = ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
-
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-        return;
-      }
-
-      if (e.key === '?' && !isInput) {
-        e.preventDefault();
-        setShortcutsModalOpen((prev) => !prev);
-        return;
-      }
-
-      if (e.key === 'Escape') {
-        if (shortcutsModalOpen) {
-          setShortcutsModalOpen(false);
-          return;
-        }
-        if (document.activeElement === searchInputRef.current) {
-          searchInputRef.current?.blur();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcutsModalOpen]);
-
   // Load authoritative suppliers and product counts from SQLite
   useEffect(() => {
     let active = true;
@@ -161,65 +136,84 @@ export default function SuppliersPage({
     return Array.from(set).sort();
   }, [suppliers]);
 
-  // Filtered suppliers (using deferredSearchTerm for 120 FPS typing performance)
+  // Filtered suppliers (responsive immediately on 1st character)
   const filteredSuppliers = useMemo(() => {
     return suppliers.filter((s) => {
       if (categoryFilter !== 'all' && s.category !== categoryFilter) {
         return false;
       }
-      if (!deferredSearchTerm.trim()) return true;
-      const q = deferredSearchTerm.toLowerCase();
+      if (!searchTerm.trim()) return true;
+      const q = searchTerm.trim().toLowerCase();
       const matchName = (s.name || '').toLowerCase().includes(q);
       const matchCat = (s.category || '').toLowerCase().includes(q);
       const matchRep = (s.contactRep || '').toLowerCase().includes(q);
       const matchId = (s.id || '').toLowerCase().includes(q);
-      const matchCity = 'central distribution hub'.includes(q);
-      return matchName || matchCat || matchRep || matchId || matchCity;
+      // Only match contact address if query is at least 3 chars long, avoiding false positive single-letter matches across boilerplate address strings
+      const matchAddress = q.length >= 3 && (s.contactAddress || '').toLowerCase().includes(q);
+      return matchName || matchCat || matchRep || matchId || matchAddress;
     });
-  }, [suppliers, categoryFilter, deferredSearchTerm]);
+  }, [suppliers, categoryFilter, searchTerm]);
 
-  // Inline editing handlers
-  const startEditing = (sup) => {
-    setEditingSupplierId(sup.id);
-    setEditForm({
-      id: sup.id,
-      name: sup.name || '',
-      category: sup.category || '',
-      contactRep: sup.contactRep || '',
-      contactEmail: sup.contactEmail || '',
-      contactPhone: sup.contactPhone || '',
-      contactAddress: sup.contactAddress || 'Central Distribution Hub',
-      targetMoq: sup.targetMoq || 5000,
-      unitThreshold: sup.unitThreshold || 0,
-      leadTime: sup.leadTime || '2-3 Days',
-    });
+  // Paginated suppliers
+  const totalPages = Math.max(1, Math.ceil(filteredSuppliers.length / pageSize));
+  const paginatedSuppliers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredSuppliers.slice(start, start + pageSize);
+  }, [filteredSuppliers, currentPage, pageSize]);
+
+  // Unified Supplier modal handlers (Add & Edit)
+  const handleOpenAddSupplier = () => {
+    setSupplierToEdit(null);
+    setSupplierModalOpen(true);
   };
 
-  const cancelEditing = () => {
-    setEditingSupplierId(null);
-    setEditForm({});
+  const handleOpenEditSupplier = (sup) => {
+    setSupplierToEdit(sup);
+    setSupplierModalOpen(true);
   };
 
-  const handleSaveInlineEdit = async () => {
-    if (!editForm.name || !editForm.name.trim()) {
-      showToast('Supplier name cannot be empty', 'error');
-      return;
-    }
-    try {
-      setIsSaving(true);
-      const updated = await updateSupplier(editForm);
+  const handleSupplierSaved = (savedSupplier, isEdit) => {
+    if (isEdit) {
       setSuppliers((prev) =>
-        prev.map((s) => (s.id === editForm.id ? { ...s, ...updated } : s))
+        prev.map((s) => (s.id === savedSupplier.id ? { ...s, ...savedSupplier } : s))
       );
-      showToast(`Supplier "${updated.name}" saved to database successfully!`, 'success');
-      setEditingSupplierId(null);
-    } catch (err) {
-      console.error('Error saving supplier:', err);
-      showToast(err.message || 'Failed to save supplier to SQLite.', 'error');
-    } finally {
-      setIsSaving(false);
+      showToast(`Supplier "${savedSupplier.name}" updated successfully!`, 'success');
+    } else {
+      setSuppliers((prev) => [savedSupplier, ...prev]);
+      showToast(`Supplier "${savedSupplier.name}" added to database!`, 'success');
     }
+    setSupplierToEdit(null);
   };
+
+  // Keyboard navigation & global shortcuts (Alt+1..5, Ctrl+K, ?, Esc, Arrow keys)
+  useGlobalNavigationShortcuts({
+    onNavigateTo,
+    onNavigateBack,
+    searchInputRef,
+    shortcutsModalOpen,
+    setShortcutsModalOpen,
+    isAnyModalOpen: supplierModalOpen,
+    onEscape: () => {
+      if (supplierModalOpen) {
+        setSupplierModalOpen(false);
+        setSupplierToEdit(null);
+        return true;
+      }
+      if (onNavigateBack) {
+        onNavigateBack();
+        return true;
+      }
+      return false;
+    },
+    itemsCount: paginatedSuppliers.length,
+    focusedIndex,
+    setFocusedIndex,
+    onEnter: (idx) => {
+      const sup = paginatedSuppliers[idx];
+      if (sup) handleOpenEditSupplier(sup);
+    },
+    tableRef,
+  });
 
   return (
     <div className="redesign-page-shell">
@@ -235,16 +229,10 @@ export default function SuppliersPage({
         themePreference={effectiveTheme}
         handleSelectTheme={handleSelectTheme}
         onNavigateToReplenishment={onNavigateBack}
-        onNavigateToManifests={() => {
-          if (onNavigateTo) onNavigateTo('manifests');
-        }}
-        onNavigateToDashboard={() => {
-          if (onNavigateTo) onNavigateTo('dashboard');
-        }}
+        onNavigateToManifests={() => onNavigateTo && onNavigateTo('manifests')}
+        onNavigateToDashboard={() => onNavigateTo && onNavigateTo('dashboard')}
         onNavigateToSuppliers={() => {}}
-        onNavigateToHistory={() => {
-          if (onNavigateTo) onNavigateTo('history');
-        }}
+        onNavigateToHistory={() => onNavigateTo && onNavigateTo('history')}
         activePage="suppliers"
         suppliers={suppliers}
       />
@@ -265,8 +253,8 @@ export default function SuppliersPage({
 
         {/* Main Content Area */}
         <main id="main-content" className="redesign-main-content">
-          {/* Subheader with Back Button, Title, and Subtitle */}
-          <div className="redesign-subheader">
+          {/* Subheader with Back Button, Title, Subtitle, and Add Supplier Button */}
+          <div className="redesign-subheader" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <button
                 type="button"
@@ -294,6 +282,30 @@ export default function SuppliersPage({
                 </div>
               </div>
             </div>
+
+            {/* Reusable Add Supplier Button */}
+            <button
+              type="button"
+              className="header-action-btn"
+              onClick={handleOpenAddSupplier}
+              title="Add new supplier vendor to database"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '7px 14px',
+                borderRadius: 6,
+                background: 'var(--brand, #2563eb)',
+                color: '#fff',
+                border: 'none',
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              <AddIcon style={{ fontSize: 16 }} />
+              <span>Add Supplier</span>
+            </button>
           </div>
 
           {/* Filter Bar */}
@@ -304,11 +316,15 @@ export default function SuppliersPage({
                   <SearchIcon style={{ fontSize: 16 }} />
                 </span>
                 <input
+                  ref={searchInputRef}
                   type="text"
                   className="redesign-search-input"
-                  placeholder="Search supplier, contact rep, category, city..."
+                  placeholder="Search supplier, contact rep, category, address..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   aria-label="Filter supplier by name, category, or representative"
                 />
               </div>
@@ -316,7 +332,10 @@ export default function SuppliersPage({
               <select
                 className="redesign-select"
                 value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
+                onChange={(e) => {
+                  setCategoryFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 aria-label="Filter by supplier category"
               >
                 <option value="all">All Categories</option>
@@ -342,7 +361,17 @@ export default function SuppliersPage({
           {!isMobile && (
             <div className="redesign-table-card">
               <div className="redesign-table-wrapper">
-                <table className="redesign-table" aria-label="Supplier Directory Table">
+                <table ref={tableRef} className="redesign-table" aria-label="Supplier Directory Table">
+                  <colgroup>
+                    <col style={{ width: '24%' }} />
+                    <col style={{ width: '18%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '11%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '15%' }} />
+                    <col style={{ width: '5%' }} />
+                    <col style={{ width: '5%' }} />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th scope="col">Supplier</th>
@@ -358,33 +387,41 @@ export default function SuppliersPage({
                   <tbody>
                     {isLoading ? (
                       <tr>
-                        <td colSpan={8} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)' }}>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text3)' }}>
                           Loading suppliers...
                         </td>
                       </tr>
-                    ) : filteredSuppliers.length === 0 ? (
+                    ) : paginatedSuppliers.length === 0 ? (
                       <tr>
-                        <td colSpan={8} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)' }}>
-                          No suppliers found matching current search.
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text3)' }}>
+                          No suppliers found matching current filter criteria.
                         </td>
                       </tr>
                     ) : (
-                      filteredSuppliers.map((sup) => {
-                        const isRowActive = selectedSupplierId === sup.id;
-                        const isEditing = editingSupplierId === sup.id;
+                      paginatedSuppliers.map((sup, idx) => {
+                        const isSelected = selectedSupplierId === sup.id;
                         const logoSrc = SUPPLIER_LOGOS[sup.id];
-                        const catalogCount = productCounts[sup.id] || 50;
+                        const catalogCount = productCounts[sup.id] || 0;
 
                         return (
                           <tr
                             key={sup.id}
-                            className={`${isRowActive ? 'row-active' : ''} ${isEditing ? 'row-editing' : ''}`}
-                            onClick={() => !isEditing && setSelectedSupplierId(sup.id)}
-                            style={{ cursor: isEditing ? 'default' : 'pointer' }}
+                            className={`supplier-table-row ${isSelected ? 'selected' : ''}`}
+                            style={{
+                              outline: 'none',
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => {
+                              setSelectedSupplierId(sup.id);
+                              setFocusedIndex(idx);
+                            }}
+                            onDoubleClick={() => handleOpenEditSupplier(sup)}
+                            tabIndex={0}
+                            aria-label={`Supplier ${sup.name}`}
                           >
-                            {/* Supplier Logo & Name */}
-                            <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            {/* Supplier Identity */}
+                            <td style={{ minWidth: 0, overflow: 'hidden' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, width: '100%' }}>
                                 {logoSrc ? (
                                   <img
                                     src={logoSrc}
@@ -419,156 +456,106 @@ export default function SuppliersPage({
                                     {sup.initials || sup.name.slice(0, 2).toUpperCase()}
                                   </div>
                                 )}
-                                <div style={{ flex: 1 }}>
-                                  {isEditing ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                      <input
-                                        type="text"
-                                        className="inline-edit-input"
-                                        value={editForm.name}
-                                        onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
-                                        placeholder="Supplier Name"
-                                        onClick={(e) => e.stopPropagation()}
-                                      />
-                                      <input
-                                        type="text"
-                                        className="inline-edit-input sub"
-                                        value={editForm.category}
-                                        onChange={(e) => setEditForm((prev) => ({ ...prev, category: e.target.value }))}
-                                        placeholder="Category"
-                                        onClick={(e) => e.stopPropagation()}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
-                                        {sup.name}
-                                      </div>
-                                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                                        {sup.category} • #{sup.id}
-                                      </div>
-                                    </>
-                                  )}
+                                <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                                  <div
+                                    style={{
+                                      fontWeight: 700,
+                                      fontSize: 13,
+                                      color: 'var(--text)',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                      wordBreak: 'break-word',
+                                    }}
+                                    title={sup.name}
+                                  >
+                                    {sup.name}
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: 11,
+                                      color: 'var(--text3)',
+                                      marginTop: 2,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                    title={`${sup.category} • #${sup.id}`}
+                                  >
+                                    {sup.category} • #{sup.id}
+                                  </div>
                                 </div>
                               </div>
                             </td>
 
                             {/* Contact Person */}
-                            <td>
-                              {isEditing ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                  <input
-                                    type="text"
-                                    className="inline-edit-input"
-                                    value={editForm.contactRep}
-                                    onChange={(e) => setEditForm((prev) => ({ ...prev, contactRep: e.target.value }))}
-                                    placeholder="Representative Name"
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                  <input
-                                    type="email"
-                                    className="inline-edit-input sub"
-                                    value={editForm.contactEmail}
-                                    onChange={(e) => setEditForm((prev) => ({ ...prev, contactEmail: e.target.value }))}
-                                    placeholder="Email"
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
+                            <td style={{ minWidth: 0, overflow: 'hidden' }}>
+                              <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                                <div
+                                  style={{
+                                    fontWeight: 600,
+                                    fontSize: 13,
+                                    color: 'var(--text)',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                    wordBreak: 'break-word',
+                                  }}
+                                  title={sup.contactRep || 'Fulfillment Manager'}
+                                >
+                                  {sup.contactRep || 'Fulfillment Manager'}
                                 </div>
-                              ) : (
-                                <div>
-                                  <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>
-                                    {sup.contactRep || 'Fulfillment Manager'}
+                                {sup.contactEmail && (
+                                  <div
+                                    style={{
+                                      fontSize: 11,
+                                      color: 'var(--text3)',
+                                      marginTop: 2,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                    title={sup.contactEmail}
+                                  >
+                                    {sup.contactEmail}
                                   </div>
-                                  {sup.contactEmail && (
-                                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                                      {sup.contactEmail}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                                )}
+                              </div>
                             </td>
 
                             {/* Target MOQ */}
-                            <td>
-                              {isEditing ? (
-                                <input
-                                  type="number"
-                                  className="inline-edit-input num"
-                                  style={{ width: 90 }}
-                                  value={editForm.targetMoq}
-                                  onChange={(e) => setEditForm((prev) => ({ ...prev, targetMoq: e.target.value }))}
-                                  placeholder="5000"
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              ) : (
-                                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
-                                  {formatCurrency(sup.targetMoq)}
-                                </div>
-                              )}
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>
+                                {formatCurrency(sup.targetMoq)}
+                              </div>
                             </td>
 
                             {/* Unit Threshold */}
-                            <td>
-                              {isEditing ? (
-                                <input
-                                  type="number"
-                                  className="inline-edit-input num"
-                                  style={{ width: 70 }}
-                                  value={editForm.unitThreshold}
-                                  onChange={(e) => setEditForm((prev) => ({ ...prev, unitThreshold: e.target.value }))}
-                                  placeholder="0"
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              ) : (
-                                <div style={{ fontSize: 13, color: 'var(--text2)' }}>
-                                  {sup.unitThreshold ? `${sup.unitThreshold} units` : '0 units'}
-                                </div>
-                              )}
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              <div style={{ fontSize: 13, color: 'var(--text2)' }}>
+                                {sup.unitThreshold ? `${sup.unitThreshold} units` : '0 units'}
+                              </div>
                             </td>
 
                             {/* Lead Time */}
                             <td>
-                              {isEditing ? (
-                                <input
-                                  type="text"
-                                  className="inline-edit-input"
-                                  style={{ width: 85 }}
-                                  value={editForm.leadTime}
-                                  onChange={(e) => setEditForm((prev) => ({ ...prev, leadTime: e.target.value }))}
-                                  placeholder="e.g. 3d"
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              ) : (
-                                <span className="pill-lead-time">
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <polyline points="12 6 12 12 16 14" />
-                                  </svg>
-                                  <span>{sup.leadTime || '2-3 Days'}</span>
-                                </span>
-                              )}
+                              <span className="pill-lead-time">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                  <circle cx="12" cy="12" r="10" />
+                                  <polyline points="12 6 12 12 16 14" />
+                                </svg>
+                                <span>{sup.leadTime || '2-3 Days'}</span>
+                              </span>
                             </td>
 
                             {/* Warehouse Address */}
                             <td>
-                              {isEditing ? (
-                                <input
-                                  type="text"
-                                  className="inline-edit-input"
-                                  style={{ minWidth: 150 }}
-                                  value={editForm.contactAddress}
-                                  onChange={(e) => setEditForm((prev) => ({ ...prev, contactAddress: e.target.value }))}
-                                  placeholder="Warehouse Address"
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)' }}>
-                                  <LocationOnIcon style={{ fontSize: 15, color: '#ef4444', flexShrink: 0 }} />
-                                  <span style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {sup.contactAddress || 'Central Distribution Hub'}
-                                  </span>
-                                </div>
-                              )}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)' }}>
+                                <LocationOnIcon style={{ fontSize: 15, color: '#ef4444', flexShrink: 0 }} />
+                                <span style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {sup.contactAddress || 'Central Distribution Hub'}
+                                </span>
+                              </div>
                             </td>
 
                             {/* Catalog */}
@@ -579,51 +566,21 @@ export default function SuppliersPage({
                               </div>
                             </td>
 
-                            {/* Action: Inline Edit / Save */}
+                            {/* Action: Open Reusable Supplier Modal */}
                             <td style={{ textAlign: 'right' }}>
-                              {isEditing ? (
-                                <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
-                                  <button
-                                    type="button"
-                                    className="btn-inline-save"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSaveInlineEdit();
-                                    }}
-                                    disabled={isSaving}
-                                    title="Save supplier updates to database"
-                                  >
-                                    <SaveIcon style={{ fontSize: 15 }} />
-                                    <span>{isSaving ? 'Saving...' : 'Save'}</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="btn-inline-cancel"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      cancelEditing();
-                                    }}
-                                    disabled={isSaving}
-                                    title="Cancel editing"
-                                  >
-                                    <CloseIcon style={{ fontSize: 15 }} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="btn-inline-edit"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    startEditing(sup);
-                                  }}
-                                  title={`Edit supplier ${sup.name}`}
-                                  aria-label={`Edit ${sup.name}`}
-                                >
-                                  <EditIcon style={{ fontSize: 14 }} />
-                                  <span>Edit</span>
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                className="btn-inline-edit"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEditSupplier(sup);
+                                }}
+                                title={`Edit supplier ${sup.name}`}
+                                aria-label={`Edit ${sup.name}`}
+                              >
+                                <EditIcon style={{ fontSize: 14 }} />
+                                <span>Edit</span>
+                              </button>
                             </td>
                           </tr>
                         );
@@ -636,7 +593,7 @@ export default function SuppliersPage({
               {/* Table Footer with Pagination */}
               <div className="redesign-table-footer" style={{ justifyContent: 'space-between' }}>
                 <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-                  Total {filteredSuppliers.length} active suppliers
+                  Showing {paginatedSuppliers.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, filteredSuppliers.length)} of {filteredSuppliers.length} suppliers
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -652,7 +609,11 @@ export default function SuppliersPage({
                         color: 'var(--text)',
                         fontSize: 12,
                       }}
-                      defaultValue="25"
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
                       aria-label="Rows per page"
                     >
                       <option value="10">10</option>
@@ -664,62 +625,36 @@ export default function SuppliersPage({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <button
                       type="button"
-                      disabled
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                       style={{
                         width: 28,
                         height: 28,
                         borderRadius: 4,
                         border: '1px solid var(--border)',
                         background: 'var(--bg)',
-                        color: 'var(--text3)',
-                        cursor: 'not-allowed',
+                        color: currentPage <= 1 ? 'var(--text3)' : 'var(--text)',
+                        cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
                       }}
                       aria-label="Previous page"
                     >
                       &lt;
                     </button>
+                    <span style={{ fontSize: 12, color: 'var(--text2)', padding: '0 4px' }}>
+                      Page {currentPage} of {totalPages}
+                    </span>
                     <button
                       type="button"
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 4,
-                        border: '1px solid var(--brand)',
-                        background: 'var(--brand)',
-                        color: '#fff',
-                        fontWeight: 700,
-                        fontSize: 12,
-                      }}
-                      aria-label="Page 1"
-                      aria-current="page"
-                    >
-                      1
-                    </button>
-                    <button
-                      type="button"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                       style={{
                         width: 28,
                         height: 28,
                         borderRadius: 4,
                         border: '1px solid var(--border)',
                         background: 'var(--bg)',
-                        color: 'var(--text)',
-                        fontSize: 12,
-                      }}
-                      aria-label="Page 2"
-                    >
-                      2
-                    </button>
-                    <button
-                      type="button"
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 4,
-                        border: '1px solid var(--border)',
-                        background: 'var(--bg)',
-                        color: 'var(--text)',
-                        cursor: 'pointer',
+                        color: currentPage >= totalPages ? 'var(--text3)' : 'var(--text)',
+                        cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
                       }}
                       aria-label="Next page"
                     >
@@ -741,7 +676,7 @@ export default function SuppliersPage({
               ) : (
                 filteredSuppliers.map((sup) => {
                   const logoSrc = SUPPLIER_LOGOS[sup.id];
-                  const catalogCount = productCounts[sup.id] || 50;
+                  const catalogCount = productCounts[sup.id] || 0;
 
                   return (
                     <div
@@ -798,49 +733,61 @@ export default function SuppliersPage({
                         </div>
                       </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, background: 'var(--bg)', padding: 10, borderRadius: 6, fontSize: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', fontWeight: 700 }}>Target MOQ</div>
-                        <div style={{ fontWeight: 700, color: 'var(--text)' }}>{formatCurrency(sup.targetMoq)}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, background: 'var(--bg)', padding: 10, borderRadius: 6, fontSize: 12 }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', fontWeight: 700 }}>Target MOQ</div>
+                          <div style={{ fontWeight: 700, color: 'var(--text)' }}>{formatCurrency(sup.targetMoq)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', fontWeight: 700 }}>Lead Time</div>
+                          <div style={{ fontWeight: 600, color: '#2563eb' }}>{sup.leadTime || '2-3 Days'}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', fontWeight: 700 }}>Catalog</div>
+                          <div><strong>{catalogCount}</strong> SKUs</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', fontWeight: 700 }}>Contact</div>
+                          <div style={{ fontSize: 11 }}>{sup.contactRep || 'Fulfillment Manager'}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', fontWeight: 700 }}>Lead Time</div>
-                        <div style={{ fontWeight: 600, color: '#2563eb' }}>{sup.leadTime || '2-3 Days'}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', fontWeight: 700 }}>Catalog</div>
-                        <div><strong>{catalogCount}</strong> SKUs</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', fontWeight: 700 }}>Contact</div>
-                        <div style={{ fontSize: 11 }}>{sup.contactRep || 'Fulfillment Manager'}</div>
-                      </div>
-                    </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 6 }}>
-                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                        📍 {sup.contactAddress || 'Central Distribution Hub'}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 6 }}>
+                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                          📍 {sup.contactAddress || 'Central Distribution Hub'}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-inline-edit"
+                          onClick={() => handleOpenEditSupplier(sup)}
+                          style={{ minHeight: 34, padding: '5px 12px' }}
+                          aria-label={`Edit ${sup.name}`}
+                        >
+                          <EditIcon style={{ fontSize: 14, marginRight: 4 }} /> Edit
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className="btn-inline-edit"
-                        onClick={() => startEditing(sup)}
-                        style={{ minHeight: 34, padding: '5px 12px' }}
-                        aria-label={`Edit ${sup.name}`}
-                      >
-                        <EditIcon style={{ fontSize: 14, marginRight: 4 }} /> Edit
-                      </button>
                     </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+                  );
+                })
+              )}
+            </div>
           )}
         </main>
       </div>
 
-      {/* Accessible Keyboard Shortcuts Modal */}
+      {/* Reusable Supplier Modal: Shared for both Add and Edit with identical validation */}
+      <AddSupplierModal
+        isOpen={supplierModalOpen}
+        onClose={() => {
+          setSupplierModalOpen(false);
+          setSupplierToEdit(null);
+        }}
+        supplierToEdit={supplierToEdit}
+        categories={categories}
+        onSupplierSaved={handleSupplierSaved}
+      />
+
+      {/* Accessible Keyboard Shortcuts Reference Modal */}
       <KeyboardShortcutsModal
         isOpen={shortcutsModalOpen}
         onClose={() => setShortcutsModalOpen(false)}
@@ -871,3 +818,10 @@ export default function SuppliersPage({
     </div>
   );
 }
+
+SuppliersPage.propTypes = {
+  onNavigateBack: PropTypes.func.isRequired,
+  onNavigateTo: PropTypes.func.isRequired,
+  themePreference: PropTypes.string,
+  onThemeChange: PropTypes.func,
+};

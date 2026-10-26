@@ -86,7 +86,7 @@ function seedDatabase(db) {
   db.transaction(() => {
     // 1. Suppliers
     const insertSupplier = db.prepare(`
-      INSERT OR IGNORE INTO suppliers (
+      INSERT OR REPLACE INTO suppliers (
         id, name, category, initials, badge, badge_type, target_moq, unit_threshold,
         lead_time, color, all_healthy, contact_rep, contact_email, contact_phone, contact_address
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -318,12 +318,12 @@ export async function getDatabase() {
         console.warn('[SQLite] Manifest migration check error:', mErr);
       }
 
-      // Verify if seeded or if products need migration to 150 records
+      // Verify if seeded or if products need migration to 1000 records
       const supplierCount = Number(db.selectValue('SELECT COUNT(*) FROM suppliers;') || 0);
       const prodCount = Number(db.selectValue('SELECT COUNT(*) FROM inventory_items;') || 0);
 
-      if (supplierCount === 0 || prodCount < 150) {
-        console.info(`[SQLite] Seeding / migrating database (existing products: ${prodCount}, target: 150)...`);
+      if (supplierCount < 10 || prodCount < 1000) {
+        console.info(`[SQLite] Seeding / migrating database (existing products: ${prodCount}, target: 1000)...`);
         seedDatabase(db);
         schedulePersistence();
       }

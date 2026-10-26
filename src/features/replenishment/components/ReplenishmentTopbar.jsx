@@ -39,12 +39,15 @@ export default function ReplenishmentTopbar({
   const mobileSearchInputRef = useRef(null);
   const mobileMenuRef = useRef(null);
 
+  // Topbar search bar is only shown on Dashboard and Replenishment matrix (hidden on Manifests, Suppliers, and History to eliminate redundancy)
+  const showTopSearch = activePage === 'dashboard' || activePage === 'replenishment';
+
   // Auto-focus mobile search input when expanded
   useEffect(() => {
-    if (mobileSearchOpen) {
+    if (mobileSearchOpen && showTopSearch) {
       setTimeout(() => mobileSearchInputRef.current?.focus(), 60);
     }
-  }, [mobileSearchOpen]);
+  }, [mobileSearchOpen, showTopSearch]);
 
   // Click-outside listener to close 3-dot mobile menu
   useEffect(() => {
@@ -65,8 +68,8 @@ export default function ReplenishmentTopbar({
   return (
     <>
       {/* ─── Top Bar ──────────────────────────────────────────────────────── */}
-      <header className={`topbar ${mobileSearchOpen ? 'topbar--search-open' : ''}`}>
-        {mobileSearchOpen ? (
+      <header className={`topbar ${mobileSearchOpen && showTopSearch ? 'topbar--search-open' : ''}`}>
+        {mobileSearchOpen && showTopSearch ? (
           <div className="topbar-search-expanded" role="search">
             <span className="search-icon" aria-hidden="true">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -138,8 +141,8 @@ export default function ReplenishmentTopbar({
               </span>
             </div>
 
-            {/* Desktop Global Search Bar (>= 992px) */}
-            {windowWidth >= 992 && (
+            {/* Desktop Global Search Bar (>= 992px) - only on Dashboard and Replenishment Desk */}
+            {showTopSearch && windowWidth >= 992 && (
               <div className="topbar-search">
                 <div className="search-box">
                   <span className="search-icon">
@@ -170,8 +173,8 @@ export default function ReplenishmentTopbar({
             )}
 
             <div className="topbar-right position-relative">
-              {/* Search Icon Toggle (< 992px) - placed BEFORE profile view */}
-              {windowWidth < 992 && (
+              {/* Search Icon Toggle (< 992px) - only on Dashboard and Replenishment Desk */}
+              {showTopSearch && windowWidth < 992 && (
                 <button
                   type="button"
                   className="btn-search-toggle"
@@ -290,6 +293,7 @@ export default function ReplenishmentTopbar({
                   value={themePreference}
                   onChange={handleSelectTheme}
                   className="topbar-theme-switcher"
+                  style={{ width: 36, height: 36 }}
                 />
               )}
 

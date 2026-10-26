@@ -4,6 +4,7 @@ import '../../styles/replenishment.css';
 import { fetchPOHistory, deletePurchaseOrder, fetchSuppliers } from '../../db/queries.js';
 import ReplenishmentTopbar from '../replenishment/components/ReplenishmentTopbar.jsx';
 import KeyboardShortcutsModal from '../../components/ui/KeyboardShortcutsModal.jsx';
+import useGlobalNavigationShortcuts from '../../hooks/useGlobalNavigationShortcuts.js';
 import Modal from '../../components/ui/Modal.jsx';
 import Button from '../../components/ui/Button.jsx';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
@@ -27,7 +28,6 @@ export default function POHistoryPage({
   const [suppliers, setSuppliers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const deferredSearchTerm = useDeferredValue(searchTerm);
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'draft' | 'dispatched'
   const [supplierFilter, setSupplierFilter] = useState(() => initialSupplierId || 'all');
   const [expandedOrderId, setExpandedOrderId] = useState(null);
@@ -35,6 +35,7 @@ export default function POHistoryPage({
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
   const [toast, setToast] = useState(null);
+  const [focusedIndex, setFocusedIndex] = useState(0);
 
   const searchInputRef = useRef(null);
 
@@ -131,7 +132,7 @@ export default function POHistoryPage({
     return { all: orders.length, draft: drafts, dispatched };
   }, [orders]);
 
-  // Filtered orders
+  // Filtered orders (responsive immediately on 1st character)
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
       // 1. Status Filter
@@ -139,14 +140,15 @@ export default function POHistoryPage({
       if (statusFilter === 'dispatched' && o.status === 'draft') return false;
 
       // 2. Search Query Filter
-      if (deferredSearchTerm.trim()) {
-        const q = deferredSearchTerm.toLowerCase();
+      if (searchTerm.trim()) {
+        const q = searchTerm.trim().toLowerCase();
         const sup = supplierMap[o.supplierId];
         const supName = sup?.name?.toLowerCase() || '';
         const poNum = (o.poNumber || '').toLowerCase();
-        const notes = (o.notes || '').toLowerCase();
+        // Only check notes if query is at least 3 chars, preventing boilerplate note text from matching all records on 1st letter
+        const notes = q.length >= 3 ? (o.notes || '').toLowerCase() : '';
         const itemsMatch = o.items?.some(
-          (it) => it.name.toLowerCase().includes(q) || it.sku.toLowerCase().includes(q)
+          (it) => (it.name || '').toLowerCase().includes(q) || (it.sku || '').toLowerCase().includes(q)
         );
         if (!poNum.includes(q) && !supName.includes(q) && !notes.includes(q) && !itemsMatch) {
           return false;
@@ -155,7 +157,43 @@ export default function POHistoryPage({
 
       return true;
     });
-  }, [orders, statusFilter, deferredSearchTerm, supplierMap]);
+  }, [orders, statusFilter, searchTerm, supplierMap]);
+
+  // Global keyboard shortcuts (Alt+1..5, Ctrl+K, ?, Esc, Arrow keys)
+  useGlobalNavigationShortcuts({
+    onNavigateTo,
+    onNavigateBack,
+    searchInputRef,
+    shortcutsModalOpen,
+    setShortcutsModalOpen,
+    isAnyModalOpen: Boolean(deleteConfirmOrder),
+    onEscape: () => {
+      if (deleteConfirmOrder) {
+        setDeleteConfirmOrder(null);
+        return true;
+      }
+      if (expandedOrderId) {
+        setExpandedOrderId(null);
+        return true;
+      }
+      if (onNavigateBack) {
+        onNavigateBack();
+        return true;
+      }
+      return false;
+    },
+    itemsCount: filteredOrders.length,
+    focusedIndex,
+    setFocusedIndex,
+    onEnter: (idx) => {
+      const ord = filteredOrders[idx];
+      if (ord) setExpandedOrderId((prev) => (prev === ord.id ? null : ord.id));
+    },
+    onSpace: (idx) => {
+      const ord = filteredOrders[idx];
+      if (ord) setExpandedOrderId((prev) => (prev === ord.id ? null : ord.id));
+    },
+  });
 
   // Delete workflow
   const handleDeletePO = async (po) => {
@@ -247,6 +285,7 @@ export default function POHistoryPage({
                   <SearchIcon style={{ fontSize: 16 }} />
                 </span>
                 <input
+                  ref={searchInputRef}
                   type="text"
                   className="redesign-search-input"
                   placeholder="Search PO #, supplier, SKU, product name..."
@@ -354,7 +393,7 @@ export default function POHistoryPage({
                         </td>
                       </tr>
                     ) : (
-                      filteredOrders.map((po) => {
+                      filteredOrders.map((po, idx) => {
                         const isExpanded = expandedOrderId === po.id;
                         const sup = supplierMap[po.supplierId];
                         const logoSrc = SUPPLIER_LOGOS[po.supplierId];
@@ -369,8 +408,15 @@ export default function POHistoryPage({
                           <Fragment key={po.id}>
                             <tr
                               className={`redesign-tr ${isExpanded ? 'expanded' : ''}`}
-                              onClick={() => setExpandedOrderId(isExpanded ? null : po.id)}
-                              style={{ cursor: 'pointer' }}
+                              onClick={() => {
+                                setExpandedOrderId(isExpanded ? null : po.id);
+                                setFocusedIndex(idx);
+                              }}
+                              style={{
+                                cursor: 'pointer',
+                                outline: 'none',
+                              }}
+                              tabIndex={0}
                             >
                               <td>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

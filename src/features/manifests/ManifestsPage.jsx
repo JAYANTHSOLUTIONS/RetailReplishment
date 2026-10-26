@@ -3,6 +3,7 @@ import '../../styles/replenishment.css';
 import { fetchAllManifests, updateManifestStatus } from '../../db/queries.js';
 import ReplenishmentTopbar from '../replenishment/components/ReplenishmentTopbar.jsx';
 import KeyboardShortcutsModal from '../../components/ui/KeyboardShortcutsModal.jsx';
+import useGlobalNavigationShortcuts from '../../hooks/useGlobalNavigationShortcuts.js';
 import { SUPPLIER_LOGOS } from '../../utils/supplierLogos.js';
 
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -18,7 +19,6 @@ export default function ManifestsPage({
   const [manifests, setManifests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const deferredSearchTerm = useDeferredValue(searchTerm);
   const [statusFilter, setStatusFilter] = useState('all');
   const [supplierFilter, setSupplierFilter] = useState('all');
   const [expandedManifestId, setExpandedManifestId] = useState(null);
@@ -26,6 +26,7 @@ export default function ManifestsPage({
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  const [focusedIndex, setFocusedIndex] = useState(0);
 
   const searchInputRef = useRef(null);
 
@@ -75,42 +76,6 @@ export default function ManifestsPage({
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
-
-  // Keyboard navigation & shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      const isInput = ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
-
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-        return;
-      }
-
-      if (e.key === '?' && !isInput) {
-        e.preventDefault();
-        setShortcutsModalOpen((prev) => !prev);
-        return;
-      }
-
-      if (e.key === 'Escape') {
-        if (shortcutsModalOpen) {
-          setShortcutsModalOpen(false);
-          return;
-        }
-        if (expandedManifestId) {
-          setExpandedManifestId(null);
-          return;
-        }
-        if (document.activeElement === searchInputRef.current) {
-          searchInputRef.current?.blur();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcutsModalOpen, expandedManifestId]);
 
   // Load genuine manifests from SQLite DB
   const loadManifests = async () => {
@@ -174,7 +139,7 @@ export default function ManifestsPage({
     }
   };
 
-  // Filtered manifests (using deferredSearchTerm for 120 FPS typing performance)
+  // Filtered manifests (responsive immediately on 1st character)
   const filteredManifests = useMemo(() => {
     return manifests.filter((m) => {
       if (statusFilter !== 'all' && m.status !== statusFilter) {
@@ -183,8 +148,8 @@ export default function ManifestsPage({
       if (supplierFilter !== 'all' && m.supplierId !== supplierFilter) {
         return false;
       }
-      if (!deferredSearchTerm.trim()) return true;
-      const q = deferredSearchTerm.toLowerCase();
+      if (!searchTerm.trim()) return true;
+      const q = searchTerm.trim().toLowerCase();
       const matchManifestNo = (m.manifestNo || '').toLowerCase().includes(q);
       const matchSupplier = (m.supplierName || '').toLowerCase().includes(q);
       const matchCarrier = (m.carrier || '').toLowerCase().includes(q);
@@ -193,7 +158,42 @@ export default function ManifestsPage({
       );
       return matchManifestNo || matchSupplier || matchCarrier || matchItems;
     });
-  }, [manifests, statusFilter, supplierFilter, deferredSearchTerm]);
+  }, [manifests, statusFilter, supplierFilter, searchTerm]);
+
+  // Keyboard navigation & shortcuts (Alt+1..5, Ctrl+K, ?, Esc, Arrow keys)
+  useGlobalNavigationShortcuts({
+    onNavigateTo,
+    onNavigateBack,
+    searchInputRef,
+    shortcutsModalOpen,
+    setShortcutsModalOpen,
+    onEscape: () => {
+      if (expandedManifestId) {
+        setExpandedManifestId(null);
+        return true;
+      }
+      if (onNavigateBack) {
+        onNavigateBack();
+        return true;
+      }
+      return false;
+    },
+    itemsCount: filteredManifests.length,
+    focusedIndex,
+    setFocusedIndex,
+    onEnter: (idx) => {
+      const mnf = filteredManifests[idx];
+      if (mnf) {
+        setExpandedManifestId((prev) => (prev === mnf.id ? null : mnf.id));
+      }
+    },
+    onSpace: (idx) => {
+      const mnf = filteredManifests[idx];
+      if (mnf) {
+        setExpandedManifestId((prev) => (prev === mnf.id ? null : mnf.id));
+      }
+    },
+  });
 
   return (
     <div className="redesign-page-shell">
@@ -278,6 +278,7 @@ export default function ManifestsPage({
                   <SearchIcon style={{ fontSize: 16 }} />
                 </span>
                 <input
+                  ref={searchInputRef}
                   type="text"
                   className="redesign-search-input"
                   placeholder="Search manifest #, supplier, carrier..."
@@ -384,7 +385,7 @@ export default function ManifestsPage({
                         </td>
                       </tr>
                     ) : (
-                      filteredManifests.map((m) => {
+                      filteredManifests.map((m, idx) => {
                         const isExpanded = expandedManifestId === m.id;
                         const isUpdating = updatingId === m.id;
                         const manifestItems = m.items || m.products || [];
@@ -420,7 +421,14 @@ export default function ManifestsPage({
 
                         return (
                           <Fragment key={m.id}>
-                            <tr>
+                            <tr
+                              style={{
+                                outline: 'none',
+                                cursor: 'pointer',
+                              }}
+                              onClick={() => setFocusedIndex(idx)}
+                              tabIndex={0}
+                            >
                               {/* Manifest # */}
                               <td>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

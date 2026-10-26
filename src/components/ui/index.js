@@ -5,5 +5,6 @@ export { default as Dialog } from './Dialog.jsx';
 export { default as Input } from './Input.jsx';
 export { default as Select } from './Select.jsx';
 export { default as StatusBadge } from './StatusBadge.jsx';
-export { default as ThemeSwitcher } from './ThemeSwitcher.jsx';
+export { default as ThemeSwitcher, default as IconCycleButton } from './ThemeSwitcher.jsx';
 export { default as KeyboardShortcutsModal } from './KeyboardShortcutsModal.jsx';
+export { default as SupplierModal } from '../../features/replenishment/AddSupplierModal.jsx';

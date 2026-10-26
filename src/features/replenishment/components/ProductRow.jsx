@@ -53,13 +53,13 @@ const ProductRow = memo(function ProductRow({
           tabIndex={-1}
         />
       </td>
-      <td className="col-id">
+      <td className="col-id" title={prod.id}>
         <span className="prod-id-code">{prod.id}</span>
       </td>
-      <td className="col-sku">
+      <td className="col-sku" title={prod.sku}>
         <span className="sku-lbl">{prod.sku}</span>
       </td>
-      <td className="col-name">
+      <td className="col-name" title={prod.name}>
         <div className="prod-name">{prod.name}</div>
       </td>
       <td className="col-sup">
@@ -76,7 +76,7 @@ const ProductRow = memo(function ProductRow({
           </span>
         </div>
       </td>
-      <td className="col-cat">
+      <td className="col-cat" title={prod.category}>
         <span className="cat-cell-tag">{prod.category}</span>
       </td>
       <td className="col-stk">{prod.currentStock}</td>
@@ -94,9 +94,19 @@ const ProductRow = memo(function ProductRow({
               className={`qty-inp ${inlineQtyError ? 'has-error' : ''}`}
               value={editQtyValue}
               onChange={(e) => onInlineQtyChange(e.target.value)}
-              onBlur={() => onCommitInlineQty(prod.sku)}
+              onBlur={() => {
+                const originalVal = hasPendingEdit ? pendingVal : String(prod.orderQty);
+                if (editQtyValue === originalVal) {
+                  onCancelInlineQty();
+                }
+                // If altered, keep isUnsaved active so leaving triggers unsaved warning unless saved via Ctrl+S / Enter
+              }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onCommitInlineQty(prod.sku);
+                } else if (e.key === 'Enter') {
                   e.preventDefault();
                   onCommitInlineQty(prod.sku);
                 } else if (e.key === 'Escape') {
@@ -137,9 +147,21 @@ const ProductRow = memo(function ProductRow({
                 id={`inline-qty-err-${prod.sku}`}
                 className="field-error inline-qty-error"
                 role="alert"
-                style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px', whiteSpace: 'nowrap' }}
+                title={inlineQtyError}
+                style={{
+                  fontSize: '9.5px',
+                  lineHeight: '1.2',
+                  color: '#ef4444',
+                  marginTop: '2px',
+                  maxWidth: '92px',
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  textAlign: 'center',
+                }}
               >
-                {inlineQtyError}
+                {inlineQtyError.includes('Quantity must be at least')
+                  ? inlineQtyError.replace('Quantity must be at least ', 'Min ')
+                  : inlineQtyError}
               </div>
             )}
           </div>

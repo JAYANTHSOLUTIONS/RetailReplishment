@@ -57,6 +57,8 @@ export default function ReplenishmentPage({
   initialSupplierFilter,
   initialDraftToRestore,
   onClearDraftToRestore,
+  initialReorderProduct,
+  onClearReorderProduct,
   themePreference: propThemePreference,
   onThemeChange: propOnThemeChange,
 }) {
@@ -134,8 +136,9 @@ export default function ReplenishmentPage({
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [saveAllError, setSaveAllError] = useState(null);
 
-  // Column-level dropdown filters & sort (Supplier, Category, Status, Subtotal)
+  // Column-level dropdown filters & sort (Product Name, Supplier, Category, Status, Subtotal)
   const [colFilters, setColFilters] = useState({
+    productNames: [],
     supplierIds: [],
     categories: [],
     statuses: [],
@@ -146,6 +149,7 @@ export default function ReplenishmentPage({
 
   const activeColFilterCount = useMemo(() => {
     let count = 0;
+    if (colFilters.productNames && colFilters.productNames.length > 0) count++;
     if (colFilters.supplierIds && colFilters.supplierIds.length > 0) count++;
     if (colFilters.categories && colFilters.categories.length > 0) count++;
     if (colFilters.statuses && colFilters.statuses.length > 0) count++;
@@ -155,6 +159,7 @@ export default function ReplenishmentPage({
 
   const handleClearColFilters = () => {
     setColFilters({
+      productNames: [],
       supplierIds: [],
       categories: [],
       statuses: [],
@@ -218,6 +223,23 @@ export default function ReplenishmentPage({
   // SQLite Backed State
   const [suppliers, setSuppliers] = useState([]);
   const [products, setProducts] = useState([]);
+
+  // Deduplicated product names for column filter dropdown
+  const productNameOptions = useMemo(() => {
+    const map = {};
+    products.forEach((p) => {
+      if (p.name) {
+        map[p.name] = (map[p.name] || 0) + 1;
+      }
+    });
+    return Object.keys(map)
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({
+        value: name,
+        label: name,
+        count: map[name],
+      }));
+  }, [products]);
 
   // Expandable & Collapsible Side Panels State (Horizontal side positions)
   const [sqExpanded, setSqExpanded] = useState(false);
@@ -422,17 +444,24 @@ export default function ReplenishmentPage({
   // Active filter count
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (appliedFilters.statuses?.length) count += appliedFilters.statuses.length;
-    if (appliedFilters.suppliers?.length) {
-      count += appliedFilters.suppliers.length;
+    const stats = new Set([...(appliedFilters.statuses || []), ...(colFilters.statuses || [])]);
+    count += stats.size;
+
+    const sups = new Set([...(appliedFilters.suppliers || []), ...(colFilters.supplierIds || [])]);
+    if (sups.size > 0) {
+      count += sups.size;
     } else if (activeQueueSupplierId) {
       count += 1;
     }
-    if (appliedFilters.categories?.length) count += appliedFilters.categories.length;
+
+    const cats = new Set([...(appliedFilters.categories || []), ...(colFilters.categories || [])]);
+    count += cats.size;
+
     if (appliedFilters.search?.trim()) count += 1;
-    count += activeColFilterCount;
+    if (colFilters.productNames?.length) count += colFilters.productNames.length;
+    if (colFilters.subtotalSort || colFilters.sortColumn) count += 1;
     return count;
-  }, [appliedFilters, activeQueueSupplierId, activeColFilterCount]);
+  }, [appliedFilters, activeQueueSupplierId, colFilters]);
 
   const hasActiveFilters = activeFilterCount > 0;
 
@@ -462,7 +491,12 @@ export default function ReplenishmentPage({
         return false;
       }
 
-      // 4. Desktop column-level filters (Supplier, Category, Status) - multi-value array checks
+      // 4. Desktop column-level filters (Product Name, Supplier, Category, Status) - multi-value array checks
+      if (colFilters.productNames && colFilters.productNames.length > 0) {
+        if (!colFilters.productNames.includes(p.name)) {
+          return false;
+        }
+      }
       if (colFilters.supplierIds && colFilters.supplierIds.length > 0) {
         if (!colFilters.supplierIds.includes(p.supplierId)) {
           return false;
@@ -615,11 +649,20 @@ export default function ReplenishmentPage({
   }, [navMode]);
 
   const handleStartEdit = useCallback((pageIdx, sku, initialVal) => {
+    if (isUnsaved && editingSku && editingSku !== sku) {
+      requestActionWithUnsavedCheck(() => {
+        setFocusedRowIndex(pageIdx);
+        setEditingSku(sku);
+        setEditQtyValue(initialVal);
+        setInlineQtyError(null);
+      });
+      return;
+    }
     setFocusedRowIndex(pageIdx);
     setEditingSku(sku);
     setEditQtyValue(initialVal);
     setInlineQtyError(null);
-  }, []);
+  }, [isUnsaved, editingSku, requestActionWithUnsavedCheck]);
 
   const handleNavigateNextRow = useCallback(() => {
     setFocusedRowIndex((prev) => {
@@ -735,13 +778,13 @@ export default function ReplenishmentPage({
   // Accessible Collapse Handlers: Safely transfer focus to expand buttons before collapsing to prevent aria-hidden descendant focus conflicts
   const handleCollapseSq = () => {
     document.getElementById('btn-collapse-sq')?.blur();
-    document.getElementById('btn-expand-sq')?.focus();
+    (document.getElementById('btn-toggle-supplier-queue') || document.getElementById('btn-expand-sq'))?.focus();
     setSqExpanded(false);
   };
 
   const handleCollapseDraft = () => {
     document.getElementById('btn-collapse-draft')?.blur();
-    document.getElementById('btn-expand-draft')?.focus();
+    (document.getElementById('btn-expand-draft') || document.getElementById('btn-toggle-po-draft'))?.focus();
     setDraftExpanded(false);
   };
 
@@ -750,38 +793,23 @@ export default function ReplenishmentPage({
   // md (768px-991px): Tablet adaptive layout
   // lg (992px-1199px): Compact desktop & laptop layout
   // xl (1200px-1399px) & xxl (>=1400px): Full desktop layout
-  const gridColumns = useMemo(() => {
-    const isMobile = windowWidth < 768; // Bootstrap xs & sm (<768px)
-    const isTablet = windowWidth >= 768 && windowWidth < 992; // Bootstrap md (768px - 991px)
-    const isLaptop = windowWidth >= 992 && windowWidth < 1200; // Bootstrap lg (992px - 1199px)
+  const isDraftActive = draftExpanded && allSelectedItems.length > 0;
+  const isSqActive = sqExpanded;
 
+  const gridColumns = useMemo(() => {
+    const isMobile = windowWidth < 768; // Mobile viewports (<768px)
     if (isMobile) {
-      // Mobile viewports: table gets 100% full width; sidebars open as slide-over drawers
       return undefined;
     }
-    if (isTablet) {
-      // Tablet (md): Compact rails with 1fr table
-      const col1 = '44px';
-      const col2 = sqExpanded ? '190px' : '40px';
-      const col3 = '1fr';
-      const col4 = draftExpanded ? '240px' : '40px';
-      return `${col1} ${col2} ${col3} ${col4}`;
-    }
-    if (isLaptop) {
-      // Laptop / Small Desktop (lg): Moderate panel widths
-      const col1 = '48px';
-      const col2 = sqExpanded ? '230px' : '44px';
-      const col3 = '1fr';
-      const col4 = draftExpanded ? '280px' : '44px';
-      return `${col1} ${col2} ${col3} ${col4}`;
-    }
-    // Standard and Wide Desktops (xl >= 1200px & xxl >= 1400px)
-    const col1 = '52px';
-    const col2 = sqExpanded ? '260px' : '44px';
-    const col3 = '1fr';
-    const col4 = draftExpanded ? '320px' : '44px';
-    return `${col1} ${col2} ${col3} ${col4}`;
-  }, [sqExpanded, draftExpanded, windowWidth]);
+
+    const navWidth = windowWidth < 992 ? '44px' : '48px';
+    const sqWidth = isSqActive ? (windowWidth < 1200 ? '220px' : '260px') : '0px';
+    const tableWidth = '1fr';
+    const draftWidth = isDraftActive ? (windowWidth < 1200 ? '280px' : '320px') : '0px';
+
+    return `${navWidth} ${sqWidth} ${tableWidth} ${draftWidth}`;
+  }, [isSqActive, isDraftActive, windowWidth]);
+
 
   // ── Database Mutation Handlers (Selection Protected by Unsaved Checks) ──────
 
@@ -1063,6 +1091,7 @@ export default function ReplenishmentPage({
         ...prev,
         [sku]: editQtyValue,
       }));
+      showToast(`Quantity for ${sku} saved in pending edits.`, 'success');
     } else {
       // Reverted to original quantity: remove from pending
       setPendingQtyEdits((prev) => {
@@ -1075,7 +1104,7 @@ export default function ReplenishmentPage({
     setEditingSku(null);
     setIsUnsaved(false);
     return true;
-  }, [editQtyValue, products]);
+  }, [editQtyValue, products, showToast]);
 
   // Cancel current row edit without erasing other rows' pending edits
   const handleCancelCurrentInlineQty = useCallback(() => {
@@ -1188,9 +1217,20 @@ export default function ReplenishmentPage({
     }
   };
 
-  // Adjust item quantity directly in the draft accordion
+  // Adjust item quantity directly in the draft accordion with safety target minimum validation
   const handleDraftQtyChange = async (item, delta) => {
-    const newQty = Math.max(1, (item.orderQty || 0) + delta);
+    const nextQty = (item.orderQty || 0) + delta;
+    const check = validateOrderQtyInput(nextQty, {
+      currentStock: item.currentStock,
+      safetyTarget: item.safetyTarget,
+    });
+
+    if (!check.isValid) {
+      showToast(check.error || 'Quantity cannot be lower than safety target deficit.', 'warn');
+      return;
+    }
+
+    const newQty = check.value;
     try {
       await toggleItemSelection(item.id, true, newQty);
       setProducts((prev) =>
@@ -1198,6 +1238,31 @@ export default function ReplenishmentPage({
       );
     } catch {
       showToast('Failed to update quantity.', 'warn');
+    }
+  };
+
+  // Directly set item quantity in draft with safety target minimum validation
+  const handleDraftSetQty = async (item, rawVal) => {
+    const check = validateOrderQtyInput(rawVal, {
+      currentStock: item.currentStock,
+      safetyTarget: item.safetyTarget,
+    });
+
+    if (!check.isValid) {
+      showToast(check.error || 'Invalid quantity.', 'warn');
+      return false;
+    }
+
+    const newQty = check.value;
+    try {
+      await toggleItemSelection(item.id, true, newQty);
+      setProducts((prev) =>
+        prev.map((p) => (p.id === item.id ? { ...p, orderQty: newQty } : p))
+      );
+      return true;
+    } catch {
+      showToast('Failed to update quantity.', 'warn');
+      return false;
     }
   };
 
@@ -1474,12 +1539,17 @@ export default function ReplenishmentPage({
     cancelDiscardUnsaved,
     editingSku,
     handleCancelCurrentInlineQty,
+    handleCommitInlineQtyToPending,
     handleToggleSelect,
     pendingQtyEdits,
     setEditingSku,
     setEditQtyValue,
     setInlineQtyError,
     setIsUnsaved,
+    onNavigateToDashboard: () => requestActionWithUnsavedCheck(onNavigateToDashboard),
+    onNavigateToManifests: () => requestActionWithUnsavedCheck(onNavigateToManifests),
+    onNavigateToSuppliers: () => requestActionWithUnsavedCheck(onNavigateToSuppliers),
+    onNavigateToHistory: () => requestActionWithUnsavedCheck(onNavigateToHistory || handleOpenPOHistory),
   });
 
 
@@ -1552,6 +1622,46 @@ export default function ReplenishmentPage({
     }
   }, [initialDraftToRestore, handleRestoreDraftToQueue, onClearDraftToRestore]);
 
+  // Handle critical product reorder redirected from Executive Dashboard
+  useEffect(() => {
+    if (initialReorderProduct && !isLoading && products.length > 0) {
+      const prod = products.find(
+        (p) => p.id === initialReorderProduct.id || p.sku === initialReorderProduct.sku
+      );
+      const targetSupId = initialReorderProduct.supplierId || prod?.supplierId;
+      const deficit = Math.max(
+        1,
+        (initialReorderProduct.safetyTarget || prod?.safetyTarget || 0) -
+          (initialReorderProduct.currentStock || prod?.currentStock || 0)
+      );
+
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.id === initialReorderProduct.id || p.sku === initialReorderProduct.sku) {
+            return {
+              ...p,
+              selected: true,
+              orderQty: p.orderQty > 0 ? p.orderQty : deficit,
+            };
+          }
+          return p;
+        })
+      );
+
+      if (targetSupId) {
+        setSelectedSupplierId(targetSupId);
+        setActiveQueueSupplierId(targetSupId);
+        setExpandedDraftSupplierIds((prev) => new Set([...prev, targetSupId]));
+      }
+      setDraftExpanded(true);
+      showToast(
+        `Critical product "${initialReorderProduct.name}" added to draft order queue (Qty: ${deficit}).`,
+        'success'
+      );
+      if (onClearReorderProduct) onClearReorderProduct();
+    }
+  }, [initialReorderProduct, isLoading, products, onClearReorderProduct]);
+
   const handleOpenPOHistory = async () => {
     if (onNavigateToHistory) {
       onNavigateToHistory({ supplierId: selectedSupplierId });
@@ -1592,9 +1702,10 @@ export default function ReplenishmentPage({
         themePreference={themePreference}
         handleSelectTheme={handleSelectTheme}
         mainLogo={mainLogo}
-        onNavigateToManifests={onNavigateToManifests}
-        onNavigateToSuppliers={onNavigateToSuppliers}
-        onNavigateToHistory={onNavigateToHistory}
+        onNavigateToDashboard={() => requestActionWithUnsavedCheck(onNavigateToDashboard)}
+        onNavigateToManifests={() => requestActionWithUnsavedCheck(onNavigateToManifests)}
+        onNavigateToSuppliers={() => requestActionWithUnsavedCheck(onNavigateToSuppliers)}
+        onNavigateToHistory={() => requestActionWithUnsavedCheck(onNavigateToHistory)}
         suppliers={suppliers}
         activeQueueSupplierId={activeQueueSupplierId}
         setActiveQueueSupplierId={setActiveQueueSupplierId}
@@ -1608,31 +1719,33 @@ export default function ReplenishmentPage({
         {/* Col 1: Icon Navigation Rail */}
         <AppNavigationRail
           activePage="replenishment"
-          onNavigateToDashboard={onNavigateToDashboard}
+          onNavigateToDashboard={() => requestActionWithUnsavedCheck(onNavigateToDashboard)}
           onNavigateToReplenishment={() => {}}
-          onNavigateToManifests={onNavigateToManifests}
-          onNavigateToSuppliers={onNavigateToSuppliers}
-          onNavigateToHistory={onNavigateToHistory || handleOpenPOHistory}
+          onNavigateToManifests={() => requestActionWithUnsavedCheck(onNavigateToManifests)}
+          onNavigateToSuppliers={() => requestActionWithUnsavedCheck(onNavigateToSuppliers)}
+          onNavigateToHistory={() => requestActionWithUnsavedCheck(onNavigateToHistory || handleOpenPOHistory)}
         />
 
         {/* Col 2: Supplier Queue Sidebar (Left Side of Table) - Desktop & Tablet only */}
-        <SupplierQueueRail
-          windowWidth={windowWidth}
-          sqExpanded={sqExpanded}
-          setSqExpanded={setSqExpanded}
-          handleCollapseSq={handleCollapseSq}
-          activeQueueSuppliers={activeQueueSuppliers}
-          selectedSupplierId={selectedSupplierId}
-          activeQueueSupplierId={activeQueueSupplierId}
-          products={products}
-          validateSupplierMoq={validateSupplierMoq}
-          formatCurrency={formatCurrency}
-          handleSelectQueueSupplier={handleSelectQueueSupplier}
-          supplierLogos={SUPPLIER_LOGOS}
-          handleOpenManifests={handleOpenManifests}
-          handleOpenPOHistory={handleOpenPOHistory}
-          handleOpenContact={handleOpenContact}
-        />
+        {windowWidth >= 768 && (
+          <SupplierQueueRail
+            windowWidth={windowWidth}
+            sqExpanded={sqExpanded}
+            setSqExpanded={setSqExpanded}
+            handleCollapseSq={handleCollapseSq}
+            activeQueueSuppliers={activeQueueSuppliers}
+            selectedSupplierId={selectedSupplierId}
+            activeQueueSupplierId={activeQueueSupplierId}
+            products={products}
+            validateSupplierMoq={validateSupplierMoq}
+            formatCurrency={formatCurrency}
+            handleSelectQueueSupplier={handleSelectQueueSupplier}
+            supplierLogos={SUPPLIER_LOGOS}
+            handleOpenManifests={handleOpenManifests}
+            handleOpenPOHistory={handleOpenPOHistory}
+            handleOpenContact={handleOpenContact}
+          />
+        )}
 
 
         {/* Col 3: Center Replenishment Matrix */}
@@ -1651,6 +1764,7 @@ export default function ReplenishmentPage({
               handleApplyAllDraftMinimums={handleApplyAllDraftMinimums}
               allSelectedItems={allSelectedItems}
               handleDraftQtyChange={handleDraftQtyChange}
+              handleDraftSetQty={handleDraftSetQty}
               handleRemoveItemFromDraft={handleRemoveItemFromDraft}
               handlePromptCancel={handlePromptCancel}
               handlePromptSaveDraft={handlePromptSaveDraft}
@@ -1775,9 +1889,7 @@ export default function ReplenishmentPage({
                       </button>
                     </span>
                   )}
-                  <span className="filter-res-txt">
-                    Showing {displayProducts.length} of {products.length} products
-                  </span>
+                
                 </div>
 
                 <div className="filter-right" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -1840,6 +1952,59 @@ export default function ReplenishmentPage({
                     </div>
                   )}
 
+                  {allSelectedItems.length > 0 && (
+                    <button
+                      type="button"
+                      id="btn-expand-draft"
+                      className={`btn-secondary ${draftExpanded ? 'active' : ''}`}
+                      onClick={() => setDraftExpanded((prev) => !prev)}
+                      title={draftExpanded ? 'Hide PO Draft Queue' : 'Show PO Draft Queue'}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: draftExpanded ? 'var(--brand-bg, rgba(37, 99, 235, 0.12))' : undefined,
+                        color: draftExpanded ? 'var(--brand, #2563eb)' : undefined,
+                        borderColor: draftExpanded ? 'var(--brand, #2563eb)' : undefined,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                        <polyline points="10 9 9 9 8 9" />
+                      </svg>
+                      <span>{draftExpanded ? 'Hide PO Draft' : `Show PO Draft (${allSelectedItems.length})`}</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    id="btn-toggle-supplier-queue"
+                    className={`btn-secondary ${sqExpanded ? 'active' : ''}`}
+                    onClick={() => setSqExpanded((prev) => !prev)}
+                    title={sqExpanded ? 'Hide Supplier Queue' : 'Show Supplier Queue'}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: sqExpanded ? 'var(--brand-bg, rgba(37, 99, 235, 0.12))' : undefined,
+                      color: sqExpanded ? 'var(--brand, #2563eb)' : undefined,
+                      borderColor: sqExpanded ? 'var(--brand, #2563eb)' : undefined,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    <span>{sqExpanded ? 'Hide Supplier Queue' : `Show Supplier Queue (${activeQueueSuppliers.length})`}</span>
+                  </button>
+
                   {selectedProducts.length === 0 && Object.keys(pendingQtyEdits).length === 0 && (
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button
@@ -1900,21 +2065,34 @@ export default function ReplenishmentPage({
 
               {/* Genuine Application States */}
               {isEffectiveLoading && (
-                <div className="tbl-wrap">
-                  <div className="skel-wrap">
-                    {[1, 2, 3, 4, 5, 6, 7].map((idx) => (
-                      <div key={idx} className="skel-row">
-                        <div className="skel-cell skel-xs"></div>
-                        <div className="skel-cell skel-sm"></div>
-                        <div className="skel-cell skel-lg"></div>
-                        <div className="skel-cell skel-sm"></div>
-                        <div className="skel-cell skel-sm"></div>
-                        <div className="skel-cell skel-md"></div>
-                        <div className="skel-cell skel-sm"></div>
-                        <div className="skel-cell skel-md"></div>
-                      </div>
-                    ))}
-                  </div>
+                <div
+                  className="tbl-wrap"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: 340,
+                    gap: 16,
+                  }}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      border: '3px solid var(--border, #e2e8f0)',
+                      borderTopColor: 'var(--brand, #2563eb)',
+                      borderRadius: '50%',
+                      animation: 'spin 0.75s linear infinite',
+                    }}
+                    aria-hidden="true"
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2, #475569)' }}>
+                    Loading StockDesk replenishment catalog...
+                  </span>
+                  <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
                 </div>
               )}
 
@@ -2017,6 +2195,7 @@ export default function ReplenishmentPage({
                           <ColumnFilterDropdown
                             title="Product Name"
                             options={[]}
+                            selectedValues={[]}
                             currentSort={colFilters.sortColumn === 'name' ? colFilters.sortDirection : null}
                             sortOptions={[
                               { key: 'asc', label: 'Sort A to Z' },
@@ -2025,6 +2204,7 @@ export default function ReplenishmentPage({
                             onApply={({ sort }) => {
                               setColFilters((prev) => ({
                                 ...prev,
+                                productNames: [],
                                 sortColumn: sort ? 'name' : (prev.sortColumn === 'name' ? null : prev.sortColumn),
                                 sortDirection: sort || (prev.sortColumn === 'name' ? null : prev.sortDirection),
                                 subtotalSort: sort ? '' : prev.subtotalSort,
@@ -2032,6 +2212,7 @@ export default function ReplenishmentPage({
                             }}
                             onClear={() => setColFilters((prev) => ({
                               ...prev,
+                              productNames: [],
                               sortColumn: prev.sortColumn === 'name' ? null : prev.sortColumn,
                               sortDirection: prev.sortColumn === 'name' ? null : prev.sortDirection,
                             }))}
@@ -2055,13 +2236,23 @@ export default function ReplenishmentPage({
                                 sortDirection: sort || (prev.sortColumn === 'supplier' ? null : prev.sortDirection),
                                 subtotalSort: sort ? '' : prev.subtotalSort,
                               }));
+                              setAppliedFilters((prev) => ({
+                                ...prev,
+                                suppliers: selectedValues,
+                              }));
                             }}
-                            onClear={() => setColFilters((prev) => ({
-                              ...prev,
-                              supplierIds: [],
-                              sortColumn: prev.sortColumn === 'supplier' ? null : prev.sortColumn,
-                              sortDirection: prev.sortColumn === 'supplier' ? null : prev.sortDirection,
-                            }))}
+                            onClear={() => {
+                              setColFilters((prev) => ({
+                                ...prev,
+                                supplierIds: [],
+                                sortColumn: prev.sortColumn === 'supplier' ? null : prev.sortColumn,
+                                sortDirection: prev.sortColumn === 'supplier' ? null : prev.sortDirection,
+                              }));
+                              setAppliedFilters((prev) => ({
+                                ...prev,
+                                suppliers: [],
+                              }));
+                            }}
                           />
                         </th>
                         <th className="col-cat">
@@ -2085,13 +2276,23 @@ export default function ReplenishmentPage({
                                 sortDirection: sort || (prev.sortColumn === 'category' ? null : prev.sortDirection),
                                 subtotalSort: sort ? '' : prev.subtotalSort,
                               }));
+                              setAppliedFilters((prev) => ({
+                                ...prev,
+                                categories: selectedValues,
+                              }));
                             }}
-                            onClear={() => setColFilters((prev) => ({
-                              ...prev,
-                              categories: [],
-                              sortColumn: prev.sortColumn === 'category' ? null : prev.sortColumn,
-                              sortDirection: prev.sortColumn === 'category' ? null : prev.sortDirection,
-                            }))}
+                            onClear={() => {
+                              setColFilters((prev) => ({
+                                ...prev,
+                                categories: [],
+                                sortColumn: prev.sortColumn === 'category' ? null : prev.sortColumn,
+                                sortDirection: prev.sortColumn === 'category' ? null : prev.sortDirection,
+                              }));
+                              setAppliedFilters((prev) => ({
+                                ...prev,
+                                categories: [],
+                              }));
+                            }}
                           />
                         </th>
                         <th className="col-stk num">Stock</th>
@@ -2115,13 +2316,23 @@ export default function ReplenishmentPage({
                                 sortDirection: sort || (prev.sortColumn === 'status' ? null : prev.sortDirection),
                                 subtotalSort: sort ? '' : prev.subtotalSort,
                               }));
+                              setAppliedFilters((prev) => ({
+                                ...prev,
+                                statuses: selectedValues,
+                              }));
                             }}
-                            onClear={() => setColFilters((prev) => ({
-                              ...prev,
-                              statuses: [],
-                              sortColumn: prev.sortColumn === 'status' ? null : prev.sortColumn,
-                              sortDirection: prev.sortColumn === 'status' ? null : prev.sortDirection,
-                            }))}
+                            onClear={() => {
+                              setColFilters((prev) => ({
+                                ...prev,
+                                statuses: [],
+                                sortColumn: prev.sortColumn === 'status' ? null : prev.sortColumn,
+                                sortDirection: prev.sortColumn === 'status' ? null : prev.sortDirection,
+                              }));
+                              setAppliedFilters((prev) => ({
+                                ...prev,
+                                statuses: [],
+                              }));
+                            }}
                           />
                         </th>
                         <th className="col-qty">Order Qty</th>
@@ -2147,7 +2358,7 @@ export default function ReplenishmentPage({
                             onClear={() => setColFilters((prev) => ({ ...prev, subtotalSort: '' }))}
                           />
                         </th>
-                        <th scope="col" className="col-act" style={{ width: 80, textAlign: 'center' }}>
+                        <th scope="col" className="col-act">
                           Edit
                         </th>
                       </tr>
@@ -2174,10 +2385,10 @@ export default function ReplenishmentPage({
                         const isRowFocused = focusedRowIndex === pageIdx;
                         const sup = suppliersMap[prod.supplierId];
 
-                        const badgeType = isOrdered ? 'ordered' : prod.priority;
+                        const badgeType = isOrdered ? 'ordered' : (prod.priority || 'healthy');
                         const badgeLabel = isOrdered
                           ? 'Ordered'
-                          : prod.priority.charAt(0).toUpperCase() + prod.priority.slice(1);
+                          : (prod.priority ? prod.priority.charAt(0).toUpperCase() + prod.priority.slice(1) : 'Healthy');
 
                         return (
                           <ProductRow
@@ -2298,24 +2509,27 @@ export default function ReplenishmentPage({
         </main>
 
         {/* Col 4: Purchase Order Draft & Supplier Review Summary (Right Side of Table) - Desktop & Tablet only */}
-        <OrderDraftPanel
-          windowWidth={windowWidth}
-          draftExpanded={draftExpanded}
-          setDraftExpanded={setDraftExpanded}
-          handleCollapseDraft={handleCollapseDraft}
-          allSelectedItems={allSelectedItems}
-          selectedSupplierGroups={selectedSupplierGroups}
-          expandedDraftSupplierIds={expandedDraftSupplierIds}
-          toggleDraftAccordion={toggleDraftAccordion}
-          supplierLogos={SUPPLIER_LOGOS}
-          formatCurrency={formatCurrency}
-          handleDraftQtyChange={handleDraftQtyChange}
-          handleRemoveItemFromDraft={handleRemoveItemFromDraft}
-          handlePromptCancel={handlePromptCancel}
-          handlePromptSaveDraft={handlePromptSaveDraft}
-          handlePromptSubmitPO={handlePromptSubmitPO}
-          isDispatching={isDispatching}
-        />
+        {windowWidth >= 768 && (
+          <OrderDraftPanel
+            windowWidth={windowWidth}
+            draftExpanded={draftExpanded}
+            setDraftExpanded={setDraftExpanded}
+            handleCollapseDraft={handleCollapseDraft}
+            allSelectedItems={allSelectedItems}
+            selectedSupplierGroups={selectedSupplierGroups}
+            expandedDraftSupplierIds={expandedDraftSupplierIds}
+            toggleDraftAccordion={toggleDraftAccordion}
+            supplierLogos={SUPPLIER_LOGOS}
+            formatCurrency={formatCurrency}
+            handleDraftQtyChange={handleDraftQtyChange}
+            handleDraftSetQty={handleDraftSetQty}
+            handleRemoveItemFromDraft={handleRemoveItemFromDraft}
+            handlePromptCancel={handlePromptCancel}
+            handlePromptSaveDraft={handlePromptSaveDraft}
+            handlePromptSubmitPO={handlePromptSubmitPO}
+            isDispatching={isDispatching}
+          />
+        )}
 
       </div>
 
@@ -2427,13 +2641,30 @@ export default function ReplenishmentPage({
       <FilterModal
         isOpen={filterModalOpen}
         onClose={() => setFilterModalOpen(false)}
-        appliedFilters={
-          activeQueueSupplierId && (!appliedFilters.suppliers || appliedFilters.suppliers.length === 0)
-            ? { ...appliedFilters, suppliers: [activeQueueSupplierId] }
-            : appliedFilters
-        }
+        appliedFilters={{
+          ...appliedFilters,
+          suppliers: Array.from(new Set([
+            ...(appliedFilters.suppliers || []),
+            ...(colFilters.supplierIds || []),
+            ...(activeQueueSupplierId ? [activeQueueSupplierId] : []),
+          ])),
+          categories: Array.from(new Set([
+            ...(appliedFilters.categories || []),
+            ...(colFilters.categories || []),
+          ])),
+          statuses: Array.from(new Set([
+            ...(appliedFilters.statuses || []),
+            ...(colFilters.statuses || []),
+          ])),
+        }}
         onApply={(newFilters) => {
           setAppliedFilters(newFilters);
+          setColFilters((prev) => ({
+            ...prev,
+            supplierIds: newFilters.suppliers || [],
+            categories: newFilters.categories || [],
+            statuses: newFilters.statuses || [],
+          }));
           if (newFilters.suppliers && newFilters.suppliers.length === 1) {
             setActiveQueueSupplierId(newFilters.suppliers[0]);
             setSelectedSupplierId(newFilters.suppliers[0]);

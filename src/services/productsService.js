@@ -1,12 +1,23 @@
 // src/services/productsService.js
-// CRUD operations for the /products resource.
+// Authoritative Service layer wrapping SQLite WASM queries
 
-import { apiClient } from './apiClient';
+import {
+  fetchInventory,
+  createProduct,
+  updateProduct,
+} from '../db/queries.js';
 
 export const productsService = {
-  getAll:  ()           => apiClient.get('/products'),
-  getById: (id)         => apiClient.get(`/products/${id}`),
-  update:  (id, data)   => apiClient.patch(`/products/${id}`, data),
-  create:  (data)       => apiClient.post('/products', data),
-  remove:  (id)         => apiClient.delete(`/products/${id}`),
+  getAll: (supplierId) => fetchInventory(supplierId),
+  getById: async (id) => {
+    const list = await fetchInventory();
+    return list.find((p) => p.id === id) || null;
+  },
+  update: (id, data) => updateProduct(id, data),
+  create: (data) => createProduct(data),
+  remove: async () => {
+    // Inventory items are managed via SQLite queries
+    console.warn('[productsService] Direct item deletion is restricted to preserve manifest integrity.');
+    return { success: false, message: 'Deletion restricted by database foreign key constraints' };
+  },
 };

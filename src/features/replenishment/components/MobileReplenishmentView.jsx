@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import PropTypes from 'prop-types';
 import EditIcon from '@mui/icons-material/Edit';
 import { ThemeSwitcher } from '../../../components/ui';
@@ -13,6 +14,7 @@ export default function MobileReplenishmentView({
   handleApplyAllDraftMinimums,
   allSelectedItems = [],
   handleDraftQtyChange,
+  handleDraftSetQty,
   handleRemoveItemFromDraft,
   handlePromptCancel,
   handlePromptSaveDraft,
@@ -63,6 +65,8 @@ export default function MobileReplenishmentView({
   pageNumbers = [],
   totalPages,
 }) {
+  const [mobileDraftInputs, setMobileDraftInputs] = useState({});
+
   if (mobileView === 'draft') {
     return (
       <div className="mobile-draft-page">
@@ -217,7 +221,49 @@ export default function MobileReplenishmentView({
                                   >
                                     -
                                   </button>
-                                  <span className="mds-step-val">{item.orderQty}</span>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    className="mds-step-input"
+                                    value={mobileDraftInputs[item.id] !== undefined ? mobileDraftInputs[item.id] : item.orderQty}
+                                    onChange={(e) => {
+                                      const sanitized = sanitizeIntegerInput(e.target.value, 5);
+                                      setMobileDraftInputs((prev) => ({ ...prev, [item.id]: sanitized }));
+                                    }}
+                                    onBlur={() => {
+                                      const val = mobileDraftInputs[item.id];
+                                      if (val !== undefined && val !== String(item.orderQty)) {
+                                        if (handleDraftSetQty) {
+                                          handleDraftSetQty(item, val);
+                                        } else {
+                                          handleDraftQtyChange(item, (Number(val) || 0) - item.orderQty);
+                                        }
+                                      }
+                                      setMobileDraftInputs((prev) => {
+                                        const copy = { ...prev };
+                                        delete copy[item.id];
+                                        return copy;
+                                      });
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.target.blur();
+                                      }
+                                    }}
+                                    style={{
+                                      width: 36,
+                                      height: 24,
+                                      textAlign: 'center',
+                                      fontSize: 12,
+                                      fontWeight: 700,
+                                      border: '1px solid var(--border)',
+                                      borderRadius: 4,
+                                      background: 'var(--bg)',
+                                      color: 'var(--text)',
+                                      padding: '0 2px',
+                                    }}
+                                    aria-label={`Order quantity for ${item.name}`}
+                                  />
                                   <button
                                     type="button"
                                     className="mds-step-btn"

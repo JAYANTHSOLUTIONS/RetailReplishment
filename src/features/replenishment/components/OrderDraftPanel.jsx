@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import PropTypes from 'prop-types';
+import { sanitizeIntegerInput } from '../../../utils/validation.js';
 
 export default function OrderDraftPanel({
   windowWidth,
   draftExpanded,
-  setDraftExpanded,
   handleCollapseDraft,
   allSelectedItems = [],
   selectedSupplierGroups = [],
@@ -12,47 +13,27 @@ export default function OrderDraftPanel({
   supplierLogos = {},
   formatCurrency,
   handleDraftQtyChange,
+  handleDraftSetQty,
   handleRemoveItemFromDraft,
   handlePromptCancel,
   handlePromptSaveDraft,
   handlePromptSubmitPO,
   isDispatching = false,
 }) {
+  const [draftInputs, setDraftInputs] = useState({});
+
   if (windowWidth < 768) return null;
+  const isDraftActive = Boolean(draftExpanded && allSelectedItems.length > 0);
 
   return (
     <aside
       id="collapse-po-draft"
-      className={`po collapse-horizontal ${!draftExpanded ? 'is-collapsed' : ''}`}
+      className={`po ${isDraftActive ? 'is-active' : 'is-collapsed'}`}
       aria-label="Purchase Order Draft & Supplier Review Summary"
+      aria-hidden={!isDraftActive}
+      inert={!isDraftActive ? true : undefined}
     >
-      <div
-        className="collapsed-rail"
-        onClick={() => setDraftExpanded(true)}
-        title="Click to expand Purchase Order Draft"
-      >
-        <button
-          id="btn-expand-draft"
-          className="collapsed-rail-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            setDraftExpanded(true);
-          }}
-          aria-label="Expand Purchase Order Draft"
-          aria-expanded={draftExpanded}
-          aria-controls="collapse-po-draft"
-        >
-          «
-        </button>
-        <span className="collapsed-rail-txt">
-          PO Draft Queue ({allSelectedItems.length})
-        </span>
-      </div>
-
-      <div
-        className="collapse-horizontal-inner"
-        inert={!draftExpanded ? true : undefined}
-      >
+      <div className="po-inner">
         <div className="po-head">
           <div className="po-head-l d-flex align-items-center gap-2">
             <span className="po-title">PO Draft Queue</span>
@@ -72,14 +53,12 @@ export default function OrderDraftPanel({
           </div>
           <button
             id="btn-collapse-draft"
-            className="sec-toggle-btn"
+            className="sec-toggle-btn po-more"
             onClick={handleCollapseDraft}
-            aria-label="Collapse Purchase Order Draft"
-            title="Collapse Purchase Order Draft"
-            aria-expanded={draftExpanded}
-            aria-controls="collapse-po-draft"
+            aria-label="Hide PO Draft Queue"
+            title="Hide PO Draft Queue"
           >
-            »
+            ✕
           </button>
         </div>
 
@@ -262,12 +241,49 @@ export default function OrderDraftPanel({
                                         >
                                           -
                                         </button>
-                                        <span
-                                          className="text-center fw-bold"
-                                          style={{ minWidth: 20, color: 'var(--text)' }}
-                                        >
-                                          {effectiveQty}
-                                        </span>
+                                        <input
+                                          type="text"
+                                          inputMode="numeric"
+                                          className="draft-qty-input"
+                                          value={draftInputs[item.id] !== undefined ? draftInputs[item.id] : effectiveQty}
+                                          onChange={(e) => {
+                                            const sanitized = sanitizeIntegerInput(e.target.value, 5);
+                                            setDraftInputs((prev) => ({ ...prev, [item.id]: sanitized }));
+                                          }}
+                                          onBlur={() => {
+                                            const val = draftInputs[item.id];
+                                            if (val !== undefined && val !== String(effectiveQty)) {
+                                              if (handleDraftSetQty) {
+                                                handleDraftSetQty(item, val);
+                                              } else {
+                                                handleDraftQtyChange(item, (Number(val) || 0) - effectiveQty);
+                                              }
+                                            }
+                                            setDraftInputs((prev) => {
+                                              const copy = { ...prev };
+                                              delete copy[item.id];
+                                              return copy;
+                                            });
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              e.target.blur();
+                                            }
+                                          }}
+                                          style={{
+                                            width: 38,
+                                            height: 22,
+                                            textAlign: 'center',
+                                            fontSize: 11,
+                                            fontWeight: 700,
+                                            border: '1px solid var(--border)',
+                                            borderRadius: 4,
+                                            background: 'var(--bg)',
+                                            color: 'var(--text)',
+                                            padding: '0 2px',
+                                          }}
+                                          aria-label={`Order quantity for ${item.name}`}
+                                        />
                                         <button
                                           type="button"
                                           className="draft-qty-btn"
@@ -357,7 +373,6 @@ export default function OrderDraftPanel({
 OrderDraftPanel.propTypes = {
   windowWidth: PropTypes.number.isRequired,
   draftExpanded: PropTypes.bool.isRequired,
-  setDraftExpanded: PropTypes.func.isRequired,
   handleCollapseDraft: PropTypes.func.isRequired,
   allSelectedItems: PropTypes.array.isRequired,
   selectedSupplierGroups: PropTypes.array.isRequired,
@@ -366,6 +381,7 @@ OrderDraftPanel.propTypes = {
   supplierLogos: PropTypes.object,
   formatCurrency: PropTypes.func.isRequired,
   handleDraftQtyChange: PropTypes.func.isRequired,
+  handleDraftSetQty: PropTypes.func,
   handleRemoveItemFromDraft: PropTypes.func.isRequired,
   handlePromptCancel: PropTypes.func.isRequired,
   handlePromptSaveDraft: PropTypes.func.isRequired,

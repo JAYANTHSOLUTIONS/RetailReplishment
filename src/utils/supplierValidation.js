@@ -133,3 +133,27 @@ export function groupSelectedBySupplier(selectedItems = [], allSuppliers = []) {
 
   return results;
 }
+
+/**
+ * Validates whether an order quantity meets the supplier's threshold (Unit test helper).
+ */
+export function validateSupplierMinimum(supplier, quantity) {
+  const min = Number(supplier?.minimumOrder ?? supplier?.unitThreshold ?? 0);
+  const valid = quantity >= min;
+  return {
+    valid,
+    message: valid ? null : `Quantity ${quantity} is below minimum of ${min}`,
+  };
+}
+
+/**
+ * Validates all supplier groups against their minimum thresholds.
+ */
+export function validateAllSuppliers(groups = [], byId = {}) {
+  const result = {};
+  for (const g of groups) {
+    const sup = byId[g.supplierId] || { minimumOrder: 0 };
+    result[g.supplierId] = validateSupplierMinimum(sup, g.totalQty);
+  }
+  return result;
+}

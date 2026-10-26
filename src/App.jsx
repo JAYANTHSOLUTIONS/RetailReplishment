@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { fetchAppSetting, saveAppSetting } from './db/queries.js';
+import { getCurrentSession, clearCurrentSession } from './services/authService.js';
 
 // Route-level code splitting with React.lazy
 const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage.jsx'));
@@ -50,21 +51,28 @@ function PageFallback() {
 export default function App() {
   const [targetSupplierFilter, setTargetSupplierFilter] = useState(null);
   const [draftToRestore, setDraftToRestore] = useState(null);
+  const [reorderProduct, setReorderProduct] = useState(null);
   const [targetSupplierForHistory, setTargetSupplierForHistory] = useState(null);
 
-  // Authenticated user state
+  // Authenticated user state with JWT session verification
   const [authUser, setAuthUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('stockdesk_auth_user');
-      return saved ? JSON.parse(saved) : {
-        name: 'Store Inventory Admin',
-        email: 'admin@stockdesk.com',
-        role: 'Operations & Replenishment Director',
-        avatar: 'AD',
-      };
-    } catch {
-      return null;
-    }
+    return getCurrentSession() || {
+      name: 'Store Inventory Admin',
+      email: 'admin@stockdesk.com',
+      role: 'approver',
+      roleTitle: 'Procurement Approver (Director)',
+      permissions: [
+        'view_catalog',
+        'edit_quantities',
+        'bulk_edit',
+        'approve_po',
+        'dispatch_po',
+        'manage_suppliers',
+        'export_manifest',
+        'delete_po',
+      ],
+      avatar: 'AD',
+    };
   });
 
   const [currentPage, setCurrentPage] = useState(() => {
@@ -177,6 +185,9 @@ export default function App() {
     if (options.restoreDraft) {
       setDraftToRestore(options.restoreDraft);
     }
+    if (options.reorderProduct) {
+      setReorderProduct(options.reorderProduct);
+    }
     let targetUrl = '/';
     if (page === 'dashboard') targetUrl = '/dashboard';
     else if (page === 'login') targetUrl = '/login';
@@ -194,7 +205,7 @@ export default function App() {
 
   const handleLogout = () => {
     setAuthUser(null);
-    localStorage.removeItem('stockdesk_auth_user');
+    clearCurrentSession();
     navigateTo('login');
   };
 
@@ -253,6 +264,8 @@ export default function App() {
           initialSupplierFilter={targetSupplierFilter}
           initialDraftToRestore={draftToRestore}
           onClearDraftToRestore={() => setDraftToRestore(null)}
+          initialReorderProduct={reorderProduct}
+          onClearReorderProduct={() => setReorderProduct(null)}
         />
       )}
     </Suspense>

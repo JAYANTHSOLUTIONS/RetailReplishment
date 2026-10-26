@@ -35,14 +35,31 @@ export default function ColumnFilterDropdown({
     setIsOpen((prev) => !prev);
   };
 
-  // Adjust alignment if popover would overflow right edge of viewport
+  // Adjust alignment if popover would overflow right edge of viewport or table wrapper
   useEffect(() => {
     if (isOpen && popoverRef.current) {
       const rect = popoverRef.current.getBoundingClientRect();
-      if (rect.right > (window.innerWidth - 16)) {
+      const wrap = popoverRef.current.closest('.tbl-wrap') || document.body;
+      const wrapRect = wrap.getBoundingClientRect();
+      if (rect.right > (wrapRect.right - 12) || rect.right > (window.innerWidth - 16)) {
         setIsOverflowRight(true);
       }
     }
+  }, [isOpen]);
+
+  // Elevate parent <th> z-index when open so neighboring sticky table headers do not paint over this popover
+  useEffect(() => {
+    if (!buttonRef.current) return;
+    const th = buttonRef.current.closest('th');
+    if (!th) return;
+    if (isOpen) {
+      th.classList.add('has-open-filter');
+    } else {
+      th.classList.remove('has-open-filter');
+    }
+    return () => {
+      th.classList.remove('has-open-filter');
+    };
   }, [isOpen]);
 
   // Click outside listener
